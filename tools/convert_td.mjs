@@ -18,8 +18,8 @@ import path from 'path'
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname).replace(/^\/([A-Za-z]:)/, '$1'), '..')
 // ⚠ [경로 주의] docs 폴더는 프로젝트 밖으로 이동됨(EBUSY 방지, 2026-07 masterplan_v6 잠금 사고).
 //   아래 SRC의 'docs' 는 이제 존재하지 않는 옛 위치다.
-//   → 재실행할 때만 새 위치로 고쳐라: C:\Users\Bhappy\OneDrive\Desktop\docs\...
-//     예) const SRC = 'C:\\Users\\Bhappy\\OneDrive\\Desktop\\docs\\BrainBridge_content_full_confirmed_v5.md'
+//   → 재실행할 때만 새 위치(로컬 docs 폴더 경로)로 고쳐라.
+//     예) const SRC = '<로컬 docs 폴더 경로>/BrainBridge_content_full_confirmed_v5.md'
 //   (평소엔 손대지 말 것 — 재변환이 필요한 시점에만 수정)
 const SRC = path.join(ROOT, 'docs', 'BrainBridge_content_full_confirmed_v5.md')
 const EXIST_DIR = path.join(ROOT, 'public', 'td_json')
