@@ -85,7 +85,7 @@ export const styles = {
     border: '1.5px solid #DBD7F5',
     borderRadius: '16px',
     cursor: 'pointer',
-    textAlign: 'left',
+    textAlign: 'center', // 납작한 액션/선택 버튼 텍스트 가운데 정렬(primaryButton과 통일)
   },
   // 선택된 상태(다중 선택)일 때 강조
   choiceButtonSelected: {
