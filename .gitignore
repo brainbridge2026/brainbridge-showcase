@@ -1,0 +1,9 @@
+node_modules
+dist
+.DS_Store
+*.local
+
+# 배포 제외: 에디터 설정·개인 메모·임시 캡처
+.claude/
+report_footer_check.png
+DOCS_경로.txt
