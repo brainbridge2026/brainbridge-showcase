@@ -58,6 +58,8 @@ export default function ResultScreen({
   // C-신규(왜 로테이션): td1·td11·td22만 존재, 나머지 td는 필드 없으면 토글 자체를 숨김
   const [whyPicks, setWhyPicks] = useState([]) // A-2 블록별 로드 시 랜덤 1개(없으면 null)
   const [openWhy, setOpenWhy] = useState({}) // 블록 index → 펼침 여부
+  // [C-42] 3겹 A-3 "펼침근거": 결과문은 항상 보이고, 왜? 토글로 펼침근거(a3_pool)를 펼침.
+  const [openA3Why, setOpenA3Why] = useState({}) // A-3 항목 index → 펼침 여부
   // [DEMO-ONLY] 반복 횟수는 로컬 cases 배열 기준 카운트, 실서비스는 DB 집계 필요
   // C-14: 반복인정(횟수 구간별) + 위로풀(카테고리 로테이션), 세션 유지 없음
   const [repeatAckText, setRepeatAckText] = useState(null) // 1겹 상단 반복 인정(없으면 null)
@@ -161,8 +163,10 @@ export default function ResultScreen({
         //  추천 표현 / 함께 쓸 표현 → teal(💬), 피할 표현 / 피할 말 → coral(⚠️)
         const a3Key = Object.keys(subs).find((k) => k.includes('A-3'))
         const rows3 = a3Key ? subs[a3Key]?.tables?.[0]?.rows ?? [] : []
+        // [C-42] A-3 펼침근거: data.a3_pool[i] 가 A-3 행 i 와 1:1(순서 정렬). 없으면 토글 숨김.
+        const a3pool = Array.isArray(data?.a3_pool) ? data.a3_pool : null
         setDeepItems(
-          rows3.map((row) => {
+          rows3.map((row, i) => {
             const title = row['항목'] ?? ''
             // variant 판별은 원문(title) 기준 유지. 표시용 제목만 cleanText 적용.
             let variant = 'default'
@@ -171,9 +175,16 @@ export default function ResultScreen({
             } else if (title.includes('피할 표현') || title.includes('피할 말')) {
               variant = 'coral'
             }
-            return { subtitle: cleanText(title), body: cleanText(row['내용']), variant }
+            const whyRaw = a3pool?.[i]?.why
+            return {
+              subtitle: cleanText(title),
+              body: cleanText(row['내용']),
+              variant,
+              why: whyRaw ? cleanText(whyRaw) : null, // [C-42] 펼침근거(없으면 null → 토글 숨김)
+            }
           }),
         )
+        setOpenA3Why({}) // 새 td 로드 시 펼침 상태 초기화
 
         // B — 아빠(정민님) 조건부 블록. tables[0].rows 중 자산 있는 행만 카드로.
         //  자산 없음: 출처가 "자산 없음"이거나 내용이 "…비워둡니다"인 행 → 카드 생략
@@ -366,6 +377,22 @@ export default function ResultScreen({
                 {item.subtitle}
               </div>
               <div style={styles.infoBody}>{item.body}</div>
+              {/* [C-42] 결과문(위)은 항상 표시, 펼침근거는 '왜?' 토글로. 자산 없으면 숨김 */}
+              {item.why && (
+                <>
+                  <button
+                    style={styles.expandButton}
+                    onClick={() =>
+                      setOpenA3Why((prev) => ({ ...prev, [i]: !prev[i] }))
+                    }
+                  >
+                    {openA3Why[i]
+                      ? `${r.layer2.collapseLabel} ▲`
+                      : `${r.layer2.expandLabel} ▼`}
+                  </button>
+                  {openA3Why[i] && <div style={styles.expandBody}>{item.why}</div>}
+                </>
+              )}
             </div>
           )
         })}
