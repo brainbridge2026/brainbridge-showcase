@@ -117,11 +117,14 @@ export default function App() {
     setScreen('done')
   }
 
-  // 완료 → 결과 보기: 답변으로 td를 매칭하고 검토 화면으로.
+  // 완료 → 결과 보기: 답변으로 td를 매칭하고 결과 화면으로 바로 이동.
   //  (오늘은 키워드 겹침 매칭. 나중에 이 함수 내부만 AI 매칭으로 교체 — utils/matchTd.js)
+  //  [C-41] 쇼케이스(사용자) 경로는 컨시어지 검토 화면('review')을 건너뛴다.
+  //   ReviewScreen/‘case review’ 코드는 삭제하지 않고 보존 — 향후 live(실동작) 모드에서
+  //   "운영자 전용" 검토 화면으로 정식 분리 예정(딥링크 ?screen=review 로 여전히 접근 가능).
   const handleReview = () => {
     setMatchResult(matchTdToInput(current))
-    setScreen('review')
+    setScreen('result') // [C-41] 'review'(운영자 검토) 스킵 → 다듬어진 결과로 직행
   }
 
   // 완료 → 다음 건 안내 (3건 도달 시 소진 케어)
