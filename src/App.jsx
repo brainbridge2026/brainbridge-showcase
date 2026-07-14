@@ -4,6 +4,8 @@ import CountScreen from './screens/CountScreen'
 import NoConflictScreen from './screens/NoConflictScreen'
 import WhoScreen from './screens/WhoScreen'
 import SituationScreen from './screens/SituationScreen'
+import ChildBehaviorScreen from './screens/ChildBehaviorScreen'
+import ParentBehaviorScreen from './screens/ParentBehaviorScreen'
 import MoodScreen from './screens/MoodScreen'
 import PlaceholderScreen from './screens/PlaceholderScreen'
 import ConflictScreen from './screens/ConflictScreen'
@@ -20,11 +22,57 @@ import BurnoutScreen from './screens/BurnoutScreen'
 import { texts } from './texts'
 import { findByRelation } from './data/familyMembers'
 import { matchTdToInput } from './utils/matchTd'
+import { saveConflictInput } from './lib/supabaseClient'
+import { getCurrentMemberId } from './lib/identity'
 
 // 나중에 실제 사용자 이름으로 쉽게 바꿀 수 있도록 이름을 변수로 관리합니다.
 // TODO: 로그인/사용자 정보 연동 시 이 값을 실제 사용자 이름으로 교체하세요.
 const userName = '현정'
 const MAX_CASES = 3
+
+// [SHOWCASE/LIVE 분기 · 5-B §3-A] 저장만 갈린다. 매칭·리포트는 두 모드 공통(항상 실작동).
+//   미설정/그 외 = showcase(저장 안 함). 'live' 일 때만 conflict_input 에 저장.
+const APP_MODE = import.meta.env.VITE_APP_MODE === 'live' ? 'live' : 'showcase'
+
+// [5-B §1] current(취합된 1건) → conflict_input.data (jsonb) 매핑.
+//   ★ 지시서 §1 표의 data 필드명을 정본으로 쓴다. 해당 갈래(개입자/마음) 필드만 채운다.
+function buildConflictData(c) {
+  const data = {
+    // 1-A 시작 지점·공통
+    whoSelectedIds: c.whoSelectedIds,
+    spouseIncluded: c.spouseIncluded,
+    scene: c.scene,
+    childType: c.childType,
+    childText: c.childText,
+    parentType: c.parentType,
+    parentText: c.parentText,
+    mood: c.mood, // 코드키 정본 hard|settling|calm (안 바꿈)
+    // 1-B 회고 국면
+    // [C-53] reason 2층 {immediate, amplifiers} (확정본 C · 작업2 반영 완료본)
+    reason: c.reason ?? null,
+    // ★ 필드명 = 실제 코드 state 키를 정본으로(지시서 §1-B 표기 정정). emotions/childReactions 복수형 유지.
+    emotions: c.emotions ?? [], // 회고④ 감정칩(순서=현저성)
+    childReactions: c.childReactions ?? [], // 회고③ 아이반응
+    childSpeech: c.childSpeech ?? [],
+    // [임시공통] C-50·C-75·C-76·C-77 정식화 시 값 세트 교체(저장구조는 유지)
+    expressions: c.expressions ?? [], // 회고② 내표현
+    // coping·intensity 정식 채택 확정(후속 반영). 저장구조 유지.
+    // [임시공통] C-50 정식화 시 값 세트 교체(저장구조는 유지)
+    coping: c.coping ?? [], // 회고 내대처
+    intensity: c.intensity ?? null, // 감정칩 강도 (feeling 스텝의 일부)
+  }
+  // 1-D 개입자 갈래 (spouseIncluded=true일 때만)
+  if (c.spouseIncluded) {
+    // [임시공통] C-77 정식화 시 값 세트 교체(저장구조는 유지)
+    data.spouseActions = c.spouseActions ?? []
+    data.spouseEmotions = c.spouseEmotions ?? []
+  } else {
+    // 1-E 마음 갈래 (spouseIncluded=false일 때만)
+    data.shareReasons = c.shareReasons ?? []
+    data.shareChoice = c.shareChoice ?? null // 공유/미공유 갈래 표시 (5-B에서 담게 추가)
+  }
+  return data
+}
 
 // 항상 한 건만 진행 중. 한 건 완료해야 다음 건 시작 가능.
 // home → count → [누구와 → 상황 → 지금마음 → (깊은회고 B~I)] → done → (다른 일도?) → 반복
@@ -87,9 +135,22 @@ export default function App() {
     setScreen('situation')
   }
 
-  // 상황 → 지금 마음
+  // 상황 → ②아이행동 (빌드지시서 4편 C: situation → childBehavior → parentBehavior → mood)
   const handleSituationNext = (scene) => {
     setCurrent({ ...current, scene })
+    setScreen('childBehavior')
+  }
+
+  // ② 아이행동 선택 저장 → ③ 부모행동
+  const handleChildNext = ({ childType, childText }) => {
+    setCurrent({ ...current, childType, childText })
+    setScreen('parentBehavior')
+  }
+
+  // ③ 부모행동 선택 저장 → (기존) 지금 마음
+  const handleParentNext = ({ parentType, parentText }) => {
+    setCurrent({ ...current, parentType, parentText })
+    // [TEMP] 감정강도 분기 설계 확정 전 임시 연결 — 지시서 5편에서 교체
     setScreen('mood')
   }
 
@@ -109,11 +170,22 @@ export default function App() {
     setScreen('conflict')
   }
 
-  // 깊은회고 완료
-  const completeCurrent = () => {
-    const c = { ...current, status: 'complete' }
+  // 깊은회고 완료 — ConflictScreen 각 스텝값(retro)을 current 로 취합(§0-(1)) 후,
+  //  [SHOWCASE/LIVE 분기] live 모드일 때만 conflict_input.data(jsonb)에 저장. 매칭·리포트는 분기 밖(공통).
+  const completeCurrent = (retro = {}) => {
+    const c = { ...current, ...retro, status: 'complete' }
     upsertCase(c)
     setCurrent(c)
+    if (APP_MODE === 'live') {
+      // ★ member_id 신분 소스는 getCurrentMemberId() 하나로 격리(알파↔베타 교체 지점, §3-B).
+      saveConflictInput({
+        conflict_id: c.id,
+        member_id: getCurrentMemberId(),
+        is_sensitive: false, // 기본 false(추후 규칙)
+        data: buildConflictData(c),
+      })
+    }
+    // showcase 면 저장 안 함 — 아래 done/매칭/리포트는 두 모드 공통으로 그대로 진행.
     setScreen('done')
   }
 
@@ -123,6 +195,8 @@ export default function App() {
   //   ReviewScreen/‘case review’ 코드는 삭제하지 않고 보존 — 향후 live(실동작) 모드에서
   //   "운영자 전용" 검토 화면으로 정식 분리 예정(딥링크 ?screen=review 로 여전히 접근 가능).
   const handleReview = () => {
+    // TODO(C-10): ②③ 관찰유형(childType/parentType 등)을 매칭 정교화에 활용 — 정식 파이프라인에서.
+    //  현재 matchTdToInput은 상황축(scene)만 사용. ②③ 값은 current에 저장돼 있으나 매칭엔 아직 미사용.
     setMatchResult(matchTdToInput(current))
     setScreen('result') // [C-41] 'review'(운영자 검토) 스킵 → 다듬어진 결과로 직행
   }
@@ -191,6 +265,26 @@ export default function App() {
     case 'situation':
       return (
         <SituationScreen onBack={go('who')} onNext={handleSituationNext} />
+      )
+
+    // [빌드지시서 4편 A] ②아이행동 선택 → ③부모행동. (situation→childBehavior 연결은 C단계)
+    case 'childBehavior':
+      return (
+        <ChildBehaviorScreen
+          scene={current?.scene}
+          onBack={go('situation')}
+          onNext={handleChildNext}
+        />
+      )
+
+    // [빌드지시서 4편 B] ③부모행동 선택 → (기존) mood. 딥링크 ?screen=parentBehavior&scene=…
+    case 'parentBehavior':
+      return (
+        <ParentBehaviorScreen
+          scene={current?.scene}
+          onBack={go('childBehavior')}
+          onNext={handleParentNext}
+        />
       )
 
     case 'mood':

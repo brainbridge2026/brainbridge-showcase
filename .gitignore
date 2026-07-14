@@ -11,5 +11,6 @@ DOCS_경로.txt
 # 민감정보 예방(향후 대비)
 .env
 .env.*
+!.env.example
 *.pem
 *.key

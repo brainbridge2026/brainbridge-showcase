@@ -25,11 +25,13 @@ export default function ConflictScreen({
   const c = texts.conflict
 
   const [step, setStep] = useState('reason')
-  const [showTip, setShowTip] = useState(false)
   const [coachingBack, setCoachingBack] = useState('share')
 
   // 선택 상태
-  const [reason, setReason] = useState(null)
+  // [C-53 해소] 회고① 트리거 2층(확정본 C). immediate=단일 즉시트리거 / amplifiers=복수 증폭배경.
+  //  ★ 값은 다른 스텝(coping/feeling/expression 등)과 동일하게 "한국어 라벨 문자열"로 저장(내부 키 아님).
+  //  이 객체가 6편(5-B)에서 conflict_input.data jsonb에 그대로 실림 — 저장 배선은 6편 소관, 여기선 로컬 state까지만.
+  const [reason, setReason] = useState({ immediate: null, amplifiers: [] })
   const [coping, setCoping] = useState([])
   const [emotions, setEmotions] = useState([])
   const [intensity, setIntensity] = useState(null)
@@ -39,6 +41,8 @@ export default function ConflictScreen({
   const [spouseActions, setSpouseActions] = useState([])
   const [spouseEmotions, setSpouseEmotions] = useState([])
   const [shareReasons, setShareReasons] = useState([])
+  // [5-B §1-E] 공유/미공유 갈래 표시 — 인벤토리상 "선택 안 담김"이라 저장되게 추가. 'shared' | 'notShared'
+  const [shareChoice, setShareChoice] = useState(null)
 
   // 다중/순서 토글 (append 순서 유지)
   const toggle = (setter) => (option) =>
@@ -48,22 +52,55 @@ export default function ConflictScreen({
 
   const afterChildSpeech = spouseIncluded ? 'spouseAction' : 'share'
 
+  // [5-B §0-(1)] 완료 시 각 스텝의 로컬 state 를 App(current)으로 넘길 취합 객체.
+  //  ★ App.buildConflictData 가 이 키들을 conflict_input.data(jsonb) 필드로 매핑한다.
+  //    키 이름을 바꾸면 App 쪽 매핑도 함께 바꿔야 함(저장구조 정합).
+  const collect = () => ({
+    reason, // 회고①트리거 2층 {immediate, amplifiers}
+    coping, // 회고 내대처
+    emotions, // 회고④ 감정칩(순서)
+    intensity, // 감정칩 강도
+    expressions, // 회고② 내표현
+    childReactions, // 회고③ 아이반응
+    childSpeech, // 회고 아이발화
+    spouseActions, // 개입자 반응 (spouseIncluded=true 갈래)
+    spouseEmotions, // 개입자 감정 (true 갈래)
+    shareReasons, // 공유 사유 (false 갈래)
+    shareChoice, // 공유/미공유 선택 (false 갈래)
+  })
+
   switch (step) {
-    // B - 힘든 이유 (단일, "전환 순간" 하이라이트+툴팁)
+    // B - 회고① 트리거 2층: 상단=즉시트리거(단일, 필수) / 하단=증폭배경(복수, 0개 허용)
     case 'reason':
       return (
         <QuestionStep
           onBack={onBack}
-          title={c.reason.question(userName, childName, scene)}
+          title={c.reason.question(scene)}
           sub={c.reason.sub}
-          canProceed={reason !== null}
+          canProceed={reason.immediate !== null} // 상단 1개 필수, 하단은 선택
           onNext={() => setStep('coping')}
         >
+          {/* 상단 — 즉시 트리거 (단일선택 · 라디오 방식) */}
           <div style={styles.choiceList}>
-            {c.reason.options.map((opt) => {
-              const selected = reason === opt
-              const hasTerm = opt.includes(c.reason.term)
-              const [before, after] = hasTerm ? opt.split(c.reason.term) : [opt, '']
+            {c.reason.immediateOptions.map((opt) => (
+              <button
+                key={opt}
+                style={{
+                  ...styles.choiceButton,
+                  ...(reason.immediate === opt ? styles.choiceButtonSelected : {}),
+                }}
+                onClick={() => setReason((r) => ({ ...r, immediate: opt }))}
+              >
+                {opt}
+              </button>
+            ))}
+          </div>
+
+          {/* 하단 — 증폭 배경 (복수선택 · 체크박스 방식, 0~2개) */}
+          <h2 style={styles.subQuestion}>{c.reason.amplifierQuestion}</h2>
+          <div style={styles.choiceList}>
+            {c.reason.amplifierOptions.map((opt) => {
+              const selected = reason.amplifiers.includes(opt)
               return (
                 <button
                   key={opt}
@@ -71,30 +108,20 @@ export default function ConflictScreen({
                     ...styles.choiceButton,
                     ...(selected ? styles.choiceButtonSelected : {}),
                   }}
-                  onClick={() => setReason(opt)}
+                  onClick={() =>
+                    setReason((r) => ({
+                      ...r,
+                      amplifiers: r.amplifiers.includes(opt)
+                        ? r.amplifiers.filter((x) => x !== opt)
+                        : [...r.amplifiers, opt],
+                    }))
+                  }
                 >
-                  {hasTerm ? (
-                    <span>
-                      {before}
-                      <span
-                        style={styles.highlight}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setShowTip((v) => !v)
-                        }}
-                      >
-                        {c.reason.term}
-                      </span>
-                      {after}
-                    </span>
-                  ) : (
-                    opt
-                  )}
+                  {opt}
                 </button>
               )
             })}
           </div>
-          {showTip && <div style={styles.tooltipBox}>{c.reason.tooltip}</div>}
         </QuestionStep>
       )
 
@@ -221,7 +248,7 @@ export default function ConflictScreen({
           title={c.spouseFeeling.question(spouseName)}
           sub={c.spouseFeeling.sub}
           canProceed={spouseEmotions.length > 0}
-          onNext={onDone}
+          onNext={() => onDone(collect())}
         >
           <OrderedChipGroup
             options={c.spouseFeeling.emotions}
@@ -245,13 +272,17 @@ export default function ConflictScreen({
             <div style={styles.choiceList}>
               <button
                 style={styles.primaryButton}
-                onClick={() => setStep('shareReason')}
+                onClick={() => {
+                  setShareChoice('shared')
+                  setStep('shareReason')
+                }}
               >
                 {texts.share.shareYes(spouseName)}
               </button>
               <button
                 style={styles.choiceButton}
                 onClick={() => {
+                  setShareChoice('notShared')
                   setCoachingBack('share')
                   setStep('coaching')
                 }}
@@ -294,7 +325,7 @@ export default function ConflictScreen({
           onBack={() => setStep(coachingBack)}
           title={texts.coaching.title}
           sub={texts.coaching.note}
-          onNext={onDone}
+          onNext={() => onDone(collect())}
         />
       )
   }
