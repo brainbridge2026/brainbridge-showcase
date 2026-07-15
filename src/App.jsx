@@ -5,6 +5,7 @@ import NoConflictScreen from './screens/NoConflictScreen'
 import WhoScreen from './screens/WhoScreen'
 import SituationScreen from './screens/SituationScreen'
 import ChildBehaviorScreen from './screens/ChildBehaviorScreen'
+import PatternAxisScreen from './screens/PatternAxisScreen'
 import ParentBehaviorScreen from './screens/ParentBehaviorScreen'
 import MoodScreen from './screens/MoodScreen'
 import PlaceholderScreen from './screens/PlaceholderScreen'
@@ -21,6 +22,7 @@ import AnotherAskScreen from './screens/AnotherAskScreen'
 import BurnoutScreen from './screens/BurnoutScreen'
 import { texts } from './texts'
 import { findByRelation } from './data/familyMembers'
+import childTypeToAxis from './data/childTypeToAxis.json'
 import { matchTdToInput } from './utils/matchTd'
 import { saveConflictInput } from './lib/supabaseClient'
 import { getCurrentMemberId } from './lib/identity'
@@ -141,9 +143,30 @@ export default function App() {
     setScreen('childBehavior')
   }
 
-  // ② 아이행동 선택 저장 → ③ 부모행동
+  // ② 아이행동 선택 저장 → [패턴 단서] 또는 ③부모행동
+  //  [C-85 §3-B / 7편 §5-2] 축 후보 개수로 분기:
+  //   2개 이상 → patternAxis 화면(사용자가 축 고름) / 1개 → 그 축 자동세팅 후 생략 / 0개 → 미설정.
   const handleChildNext = ({ childType, childText }) => {
-    setCurrent({ ...current, childType, childText })
+    const axes = childTypeToAxis[childType] ?? []
+    if (axes.length >= 2) {
+      // 축 재선택 대비 stale 값 초기화 후 패턴 단서 화면으로.
+      setCurrent({ ...current, childType, childText, patternAxis: undefined })
+      setScreen('patternAxis')
+    } else {
+      // 축 1개면 질문 없이 자동세팅(중복 질문 제거), 0개면 미설정.
+      setCurrent({
+        ...current,
+        childType,
+        childText,
+        patternAxis: axes.length === 1 ? axes[0] : undefined,
+      })
+      setScreen('parentBehavior')
+    }
+  }
+
+  // [패턴 단서] 축 선택 저장 → ③ 부모행동. (C-10: patternAxis 2신호 — matchTd가 이미 읽음)
+  const handlePatternNext = ({ patternAxis }) => {
+    setCurrent({ ...current, patternAxis })
     setScreen('parentBehavior')
   }
 
@@ -267,7 +290,7 @@ export default function App() {
         <SituationScreen onBack={go('who')} onNext={handleSituationNext} />
       )
 
-    // [빌드지시서 4편 A] ②아이행동 선택 → ③부모행동. (situation→childBehavior 연결은 C단계)
+    // [빌드지시서 4편 A] ②아이행동 선택 → [패턴 단서] 또는 ③부모행동(handleChildNext 분기).
     case 'childBehavior':
       return (
         <ChildBehaviorScreen
@@ -277,12 +300,27 @@ export default function App() {
         />
       )
 
-    // [빌드지시서 4편 B] ③부모행동 선택 → (기존) mood. 딥링크 ?screen=parentBehavior&scene=…
+    // [빌드지시서 7편 · C-85] 패턴 단서(2차 질문). 축 후보 2개 이상일 때만 여기로 옴. 뒤로 → ②아이행동.
+    case 'patternAxis':
+      return (
+        <PatternAxisScreen
+          childType={current?.childType}
+          onBack={go('childBehavior')}
+          onNext={handlePatternNext}
+        />
+      )
+
+    // [빌드지시서 4편 B] ③부모행동 선택 → (기존) mood.
+    //  [7편 §5-3] 뒤로: 축 화면을 거쳤으면(축 후보 2개↑) patternAxis, 아니면 childBehavior.
     case 'parentBehavior':
       return (
         <ParentBehaviorScreen
           scene={current?.scene}
-          onBack={go('childBehavior')}
+          onBack={go(
+            (childTypeToAxis[current?.childType] ?? []).length >= 2
+              ? 'patternAxis'
+              : 'childBehavior',
+          )}
           onNext={handleParentNext}
         />
       )
