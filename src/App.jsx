@@ -276,7 +276,13 @@ export default function App() {
       return <NoConflictScreen onBack={go('count')} onHome={go('home')} />
 
     case 'who':
-      return <WhoScreen onBack={go('count')} onNext={handleWhoNext} />
+      return (
+        <WhoScreen
+          userName={userName}
+          onBack={go('count')}
+          onNext={handleWhoNext}
+        />
+      )
 
     case 'situation':
       return (

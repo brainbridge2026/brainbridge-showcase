@@ -76,11 +76,22 @@ export const texts = {
     homeButton: '홈으로 돌아가기',
   },
 
-  // 함께 있던 사람 고르기 (다중 선택)
+  // 함께 있던 사람 고르기 (단일 선택 · C-93)
+  //  이 사건의 "상대"를 하나 지정. 배우자 재석 여부는 ConflictScreen의 spousePresence에서 별도로 물음.
+  //  ★ sub 제거(C-93 확정본): 다중 선택 시절 "함께 있던 사람을 골라주세요" 안내 줄이라, 단일 전환으로
+  //    존재 이유가 사라짐(title이 이미 상대를 물음 → sub는 반복). 라디오 동작이 곧 안내. §4 무추론(근거 없으면 비움).
   who: {
     title: '누구와 있었던 일인가요?',
-    sub: '그 순간 함께 있던 사람을 골라주세요.',
     nextButton: '다음',
+    // C-93: 배우자 단독 선택 시 — 콘텐츠 미지원(부부 2자 td 미집필).
+    //  ★ unsupported.situation*(매칭 실패 = 콘텐츠는 있는데 못 찾음, C-92)과 다름. 재사용 금지, 새 키.
+    //  서명 (name, spouse, child): report/result 블록과 동일 패턴. child는 러닝텍스트라 familiar 적용,
+    //  spouse는 givenName('정민') 기준 호명(report/result 정합). 값 주입은 WhoScreen 렌더에서.
+    spouseOnlyNotice: {
+      title: '이 관계의 안내는 아직 준비 중이에요',
+      body: (name, spouse, child) =>
+        `지금은 ${familiar(child)}와 ${name}님 사이에서 있었던 일을 안내하고 있어요. ${spouse}님과의 상황은 별도 범위로 준비하고 있어요.`,
+    },
   },
 
   // 상황
@@ -231,7 +242,19 @@ export const texts = {
       ],
     },
 
-    // H - 아빠 행동 (순서대로) — 함께 골랐을 때만
+    // 배우자 재석 확인 (C-93) — childSpeech(G)와 spouseAction(H) 사이. "그 자리에 있었나" 사실 확인이지
+    //  "개입했나"가 아님(H가 '그냥 지켜봤어요'·'자리를 피했어요'도 받으므로). sub 없음(2지선다 단일선택).
+    //  ★ familiar() 미적용: 확정본 리터럴이 `${spouse}님`(존칭 '님' 레지스터)이라, spouseAction의
+    //    `familiar(spouse)는`(비존칭) 패턴과 register가 다름 — '님'이 호명을 담당하고 familiar는
+    //    받침 이름에 '이'를 붙이는 비존칭용이라 여기선 무의미. 확정본 문구 그대로 유지(§5 보고).
+    spousePresence: {
+      question: (spouse) => `그때 ${spouse}님도 그 자리에 함께 있었나요?`,
+      // 순서 = [있었음, 없었음]. [0]='함께 있었어요'→spouseAction, [1]='함께 있지 않았어요'→share.
+      //  ★ share.title('그 자리에 함께 있지 않았지만,')과 어휘 일치(확정본 근거).
+      options: ['함께 있었어요', '함께 있지 않았어요'],
+    },
+
+    // H - 아빠 행동 (순서대로) — 재석=있었음일 때만
     spouseAction: {
       question: (spouse) => `그때 ${familiar(spouse)}는 어떻게 했나요?`,
       sub: '하나만 해당돼도 괜찮고, 여러 가지였다면 순서대로 골라주세요.',
