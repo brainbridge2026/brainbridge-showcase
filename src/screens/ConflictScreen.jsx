@@ -25,6 +25,12 @@ export const SPOUSE_PRESENCE_OPTIONS = texts.conflict.spousePresence.options
 export default function ConflictScreen({ userName, scene, onBack, onDone }) {
   const childName = findByRelation('아이')?.name ?? '아이'
   const spouseName = findByRelation('배우자')?.name ?? '배우자'
+  // [C-93] 재석 질문(spousePresence)만 givenName 호명('정민님')을 쓴다 — spouseOnlyNotice와 정합.
+  //  ★ familiar() 미적용: 질문 리터럴이 `${spouse}님`(존칭 '님')이라 이름을 그대로 넣어야 한다.
+  //    givenName '정민'은 받침(ㄴ)이라 familiar()를 걸면 '정민이' → "정민이님도"로 오적용되므로 금지.
+  //    (familiar는 '님' 없는 비존칭 호명에 '이'를 붙이는 헬퍼 — 여기 레지스터와 안 맞음.)
+  //  ★ H·I(spouseAction/spouseFeeling)의 name 호명('아빠')은 이번 범위 밖(C-99) → spouseName 그대로 둠.
+  const spouseGivenName = findByRelation('배우자')?.givenName ?? spouseName
   const c = texts.conflict
 
   const [step, setStep] = useState('reason')
@@ -238,7 +244,7 @@ export default function ConflictScreen({ userName, scene, onBack, onDone }) {
       return (
         <QuestionStep
           onBack={() => setStep('childSpeech')}
-          title={c.spousePresence.question(spouseName)}
+          title={c.spousePresence.question(spouseGivenName)}
           canProceed={spousePresent !== null}
           onNext={() =>
             setStep(
