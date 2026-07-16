@@ -8,7 +8,7 @@ import ChildBehaviorScreen from './screens/ChildBehaviorScreen'
 import ParentBehaviorScreen from './screens/ParentBehaviorScreen'
 import MoodScreen from './screens/MoodScreen'
 import PlaceholderScreen from './screens/PlaceholderScreen'
-import ConflictScreen from './screens/ConflictScreen'
+import ConflictScreen, { SPOUSE_PRESENCE_OPTIONS } from './screens/ConflictScreen'
 import DoneScreen from './screens/DoneScreen'
 import ResultScreen from './screens/ResultScreen'
 import ReportScreen from './screens/ReportScreen'
@@ -37,10 +37,18 @@ const APP_MODE = import.meta.env.VITE_APP_MODE === 'live' ? 'live' : 'showcase'
 // [5-B §1] current(취합된 1건) → conflict_input.data (jsonb) 매핑.
 //   ★ 지시서 §1 표의 data 필드명을 정본으로 쓴다. 해당 갈래(개입자/마음) 필드만 채운다.
 function buildConflictData(c) {
+  // [C-93] 개입자/마음 저장 갈래의 소스 = 재석 답(spousePresent).
+  //  ★ 비교값 = ConflictScreen이 쓰는 SPOUSE_PRESENCE_OPTIONS[0](=있었음) 단일 정본.
+  //    spousePresent는 다른 스텝(coping/emotions 등)과 동일하게 '한국어 라벨 문자열'로 저장되므로
+  //    (mood 같은 코드키 아님), 라벨→불리언 임의 변환 없이 그 라벨 상수를 그대로 비교한다.
+  //    이렇게 하면 흐름 분기(ConflictScreen)와 저장 갈래(여기)가 같은 상수를 봐 드리프트가 없다.
+  //  ※ null/미일치면 else(마음 갈래). spousePresence 스텝은 선택 필수라 정상 흐름에선 항상 둘 중 하나.
+  const spouseWasPresent = c.spousePresent === SPOUSE_PRESENCE_OPTIONS[0]
   const data = {
     // 1-A 시작 지점·공통
     whoSelectedIds: c.whoSelectedIds,
-    spouseIncluded: c.spouseIncluded,
+    // [C-93] 필드명 유지(5-B). 값 소스만 who→재석 답으로 이관(§2 계약) — 저장 레코드 정합용.
+    spouseIncluded: spouseWasPresent,
     scene: c.scene,
     childType: c.childType,
     childText: c.childText,
@@ -60,19 +68,16 @@ function buildConflictData(c) {
     // [임시공통] C-50 정식화 시 값 세트 교체(저장구조는 유지)
     coping: c.coping ?? [], // 회고 내대처
     intensity: c.intensity ?? null, // 감정칩 강도 (feeling 스텝의 일부)
-    // [C-93] 배우자 재석 답(ConflictScreen spousePresence 스텝). 원답 그대로 보존.
-    //  ★ 아래 개입자/마음 갈래 분기는 여전히 c.spouseIncluded 기준이다(§5 보고 3·4 참조):
-    //    C-93 후 spouseIncluded 소스가 who에서 제거돼 이 분기는 live 저장에서 항상 else(마음 갈래)로 감.
-    //    분기를 spousePresent로 재키잉하는 건 저장 스키마 결정(문구 확정 §4 + 기획 창 승인) 필요 → 미변경.
+    // [C-93] 배우자 재석 답 원답(라벨) 그대로 보존. 갈래 판정은 위 spouseWasPresent가 담당.
     spousePresent: c.spousePresent ?? null,
   }
-  // 1-D 개입자 갈래 (spouseIncluded=true일 때만)
-  if (c.spouseIncluded) {
+  // 1-D 개입자 갈래 (재석=있었음일 때만). jsonb 필드명은 5-B 그대로 유지.
+  if (spouseWasPresent) {
     // [임시공통] C-77 정식화 시 값 세트 교체(저장구조는 유지)
     data.spouseActions = c.spouseActions ?? []
     data.spouseEmotions = c.spouseEmotions ?? []
   } else {
-    // 1-E 마음 갈래 (spouseIncluded=false일 때만)
+    // 1-E 마음 갈래 (재석=없었음/미선택일 때). jsonb 필드명은 5-B 그대로 유지.
     data.shareReasons = c.shareReasons ?? []
     data.shareChoice = c.shareChoice ?? null // 공유/미공유 갈래 표시 (5-B에서 담게 추가)
   }

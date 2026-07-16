@@ -8,6 +8,17 @@ import { styles } from '../theme'
 import { texts } from '../texts'
 import { findByRelation } from '../data/familyMembers'
 
+// [C-93] 배우자 재석 선택지 — 순서 = [있었음, 없었음]. 라벨 문자열이 곧 저장값(다른 스텝과 동일 패턴).
+//  ★ 단일 정본: 흐름 분기(아래 spousePresence 스텝)와 저장 갈래 재키잉(App.buildConflictData)이
+//    모두 이 상수의 [0](=있었음)을 비교값으로 참조한다. 두 곳이 어긋나면 저장 갈래가 틀어지므로
+//    비교 문자열을 각자 하드코딩하지 말고 반드시 이 상수만 본다.
+// TODO: C-93 §4 확정 문구 도착 시 이 상수를 texts.conflict.spousePresence.options 로 교체
+//   (상수 하나만 갱신하면 흐름·저장 양쪽 동시 반영됨).
+export const SPOUSE_PRESENCE_OPTIONS = [
+  '(있었음 · 문구 확정 대기)',
+  '(없었음 · 문구 확정 대기)',
+]
+
 // 깊은 회고 상세 입력 (시나리오 1: 아이가 주축). B부터 시작.
 // B reason → C coping → D feeling → E expression → F childReaction → G childSpeech
 //   → ★ spousePresence (배우자 재석 질문, C-93) 에서 분기:
@@ -226,13 +237,9 @@ export default function ConflictScreen({ userName, scene, onBack, onDone }) {
     // ★ 배우자 재석 확인 (C-93) — childSpeech(G) 다음, spouseAction(H)/share 앞.
     //   "그 자리에 있었나" 사실 확인이지 "개입했나"가 아님(H가 '지켜봤어요'·'자리를 피했어요'도 받으므로).
     //   spouseIncluded(who 유래) 대체 — 재석 여부의 소스가 이 스텝으로 이관됨.
-    //   선택값 = 옵션 라벨. 순서 = [있었음, 없었음]. 있었음 → spouseAction, 없었음 → share.
-    // TODO: C-93 확정 문구로 교체 (texts.conflict.spousePresence · §4-3). 지금은 임시 플레이스홀더.
-    case 'spousePresence': {
-      const spousePresenceOptions = [
-        '(있었음 · 문구 확정 대기)',
-        '(없었음 · 문구 확정 대기)',
-      ]
+    //   선택값 = 옵션 라벨(SPOUSE_PRESENCE_OPTIONS). 있었음([0]) → spouseAction, 없었음 → share.
+    //   ★ 저장 갈래(App.buildConflictData)도 같은 상수 [0]을 비교값으로 씀 — 문구는 그 상수에서 교체.
+    case 'spousePresence':
       return (
         <QuestionStep
           onBack={() => setStep('childSpeech')}
@@ -240,18 +247,17 @@ export default function ConflictScreen({ userName, scene, onBack, onDone }) {
           canProceed={spousePresent !== null}
           onNext={() =>
             setStep(
-              spousePresent === spousePresenceOptions[0] ? 'spouseAction' : 'share',
+              spousePresent === SPOUSE_PRESENCE_OPTIONS[0] ? 'spouseAction' : 'share',
             )
           }
         >
           <CardChoiceList
-            options={spousePresenceOptions}
+            options={SPOUSE_PRESENCE_OPTIONS}
             isSelected={(o) => spousePresent === o}
             onSelect={setSpousePresent}
           />
         </QuestionStep>
       )
-    }
 
     // H - 아빠 행동 (순서대로) — 재석=있었음일 때만
     case 'spouseAction':
