@@ -60,6 +60,11 @@ function buildConflictData(c) {
     // [임시공통] C-50 정식화 시 값 세트 교체(저장구조는 유지)
     coping: c.coping ?? [], // 회고 내대처
     intensity: c.intensity ?? null, // 감정칩 강도 (feeling 스텝의 일부)
+    // [C-93] 배우자 재석 답(ConflictScreen spousePresence 스텝). 원답 그대로 보존.
+    //  ★ 아래 개입자/마음 갈래 분기는 여전히 c.spouseIncluded 기준이다(§5 보고 3·4 참조):
+    //    C-93 후 spouseIncluded 소스가 who에서 제거돼 이 분기는 live 저장에서 항상 else(마음 갈래)로 감.
+    //    분기를 spousePresent로 재키잉하는 건 저장 스키마 결정(문구 확정 §4 + 기획 창 승인) 필요 → 미변경.
+    spousePresent: c.spousePresent ?? null,
   }
   // 1-D 개입자 갈래 (spouseIncluded=true일 때만)
   if (c.spouseIncluded) {
@@ -94,7 +99,8 @@ export default function App() {
 
   const go = (next) => () => setScreen(next)
 
-  const spouse = findByRelation('배우자')
+  // [C-93] who에서 배우자 재석을 계산하지 않으므로 spouse 변수 불필요(제거).
+  //  배우자 판별은 WhoScreen(단독 선택 안내)·ConflictScreen(재석 질문)이 각자 담당.
   const childName = findByRelation('아이')?.name ?? '아이'
   const completedCount = cases.filter((x) => x.status === 'complete').length
   const incompleteCases = cases.filter((x) => x.status === 'incomplete')
@@ -127,10 +133,12 @@ export default function App() {
 
   // 누구와 → 상황
   const handleWhoNext = (selectedIds) => {
+    // C-93: spouseIncluded 소스는 ConflictScreen 재석 질문으로 이관.
+    //  who는 사건의 상대만 결정한다. spouseIncluded는 startCase 초기값(false) 유지 —
+    //  여기서 세팅하지 않는다. (?spouse=1 수동 파라미터 경로는 Result/Report에서 별도로 살아있음)
     setCurrent({
       ...current,
-      whoSelectedIds: selectedIds,
-      spouseIncluded: !!spouse && selectedIds.includes(spouse.id),
+      whoSelectedIds: selectedIds, // 배열 유지(길이 1) — 호출부 계약
     })
     setScreen('situation')
   }
@@ -326,7 +334,6 @@ export default function App() {
         <ConflictScreen
           userName={userName}
           scene={current?.scene}
-          spouseIncluded={current?.spouseIncluded}
           onBack={go(conflictBack)}
           onDone={completeCurrent}
         />

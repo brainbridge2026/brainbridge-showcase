@@ -10,16 +10,13 @@ import { findByRelation } from '../data/familyMembers'
 
 // 깊은 회고 상세 입력 (시나리오 1: 아이가 주축). B부터 시작.
 // B reason → C coping → D feeling → E expression → F childReaction → G childSpeech
-//   spouseIncluded=true  → H spouseAction → I spouseFeeling → onDone
-//   spouseIncluded=false → share (→ shareReason) → coaching → onDone
-// scene: 앞에서 고른 상황, spouseIncluded: "누구와"에서 아빠도 골랐는지.
-export default function ConflictScreen({
-  userName,
-  scene,
-  spouseIncluded,
-  onBack,
-  onDone,
-}) {
+//   → ★ spousePresence (배우자 재석 질문, C-93) 에서 분기:
+//        재석=있었음 → H spouseAction → I spouseFeeling → onDone
+//        재석=없었음 → share (→ shareReason) → coaching → onDone
+// scene: 앞에서 고른 상황.
+// [C-93] 배우자 재석 여부는 who가 아니라 이 화면의 spousePresence 스텝이 결정한다.
+//   (예전엔 who 다중선택 → spouseIncluded prop 이었음. 소스가 이 스텝으로 이관돼 prop은 더 안 받음.)
+export default function ConflictScreen({ userName, scene, onBack, onDone }) {
   const childName = findByRelation('아이')?.name ?? '아이'
   const spouseName = findByRelation('배우자')?.name ?? '배우자'
   const c = texts.conflict
@@ -43,6 +40,8 @@ export default function ConflictScreen({
   const [shareReasons, setShareReasons] = useState([])
   // [5-B §1-E] 공유/미공유 갈래 표시 — 인벤토리상 "선택 안 담김"이라 저장되게 추가. 'shared' | 'notShared'
   const [shareChoice, setShareChoice] = useState(null)
+  // [C-93] 배우자 재석 답 — spousePresence 스텝에서 선택. spouseAction/share 갈래의 소스.
+  const [spousePresent, setSpousePresent] = useState(null)
 
   // 다중/순서 토글 (append 순서 유지)
   const toggle = (setter) => (option) =>
@@ -50,7 +49,8 @@ export default function ConflictScreen({
       prev.includes(option) ? prev.filter((x) => x !== option) : [...prev, option],
     )
 
-  const afterChildSpeech = spouseIncluded ? 'spouseAction' : 'share'
+  // [C-93] childSpeech 다음은 항상 spousePresence(재석 질문)로 간다.
+  //  재석 답에 따라 spouseAction(있었음)/share(없었음)로 갈리는 분기는 그 스텝의 onNext에 있음.
 
   // [5-B §0-(1)] 완료 시 각 스텝의 로컬 state 를 App(current)으로 넘길 취합 객체.
   //  ★ App.buildConflictData 가 이 키들을 conflict_input.data(jsonb) 필드로 매핑한다.
@@ -63,10 +63,11 @@ export default function ConflictScreen({
     expressions, // 회고② 내표현
     childReactions, // 회고③ 아이반응
     childSpeech, // 회고 아이발화
-    spouseActions, // 개입자 반응 (spouseIncluded=true 갈래)
-    spouseEmotions, // 개입자 감정 (true 갈래)
-    shareReasons, // 공유 사유 (false 갈래)
-    shareChoice, // 공유/미공유 선택 (false 갈래)
+    spousePresent, // 배우자 재석 여부 (C-93) — spouseAction/share 갈래를 가르는 소스
+    spouseActions, // 개입자 반응 (재석=있었음 갈래)
+    spouseEmotions, // 개입자 감정 (재석=있었음 갈래)
+    shareReasons, // 공유 사유 (재석=없었음 갈래)
+    shareChoice, // 공유/미공유 선택 (재석=없었음 갈래)
   })
 
   switch (step) {
@@ -210,9 +211,9 @@ export default function ConflictScreen({
           onBack={() => setStep('childReaction')}
           title={c.childSpeech.question(childName)}
           sub={c.childSpeech.sub}
-          onNext={() => setStep(afterChildSpeech)}
+          onNext={() => setStep('spousePresence')}
           secondaryLabel={c.skipButton}
-          onSecondary={() => setStep(afterChildSpeech)}
+          onSecondary={() => setStep('spousePresence')}
         >
           <CardChoiceList
             options={c.childSpeech.options}
@@ -222,11 +223,41 @@ export default function ConflictScreen({
         </QuestionStep>
       )
 
-    // H - 아빠 행동 (순서대로) — 함께 골랐을 때만
-    case 'spouseAction':
+    // ★ 배우자 재석 확인 (C-93) — childSpeech(G) 다음, spouseAction(H)/share 앞.
+    //   "그 자리에 있었나" 사실 확인이지 "개입했나"가 아님(H가 '지켜봤어요'·'자리를 피했어요'도 받으므로).
+    //   spouseIncluded(who 유래) 대체 — 재석 여부의 소스가 이 스텝으로 이관됨.
+    //   선택값 = 옵션 라벨. 순서 = [있었음, 없었음]. 있었음 → spouseAction, 없었음 → share.
+    // TODO: C-93 확정 문구로 교체 (texts.conflict.spousePresence · §4-3). 지금은 임시 플레이스홀더.
+    case 'spousePresence': {
+      const spousePresenceOptions = [
+        '(있었음 · 문구 확정 대기)',
+        '(없었음 · 문구 확정 대기)',
+      ]
       return (
         <QuestionStep
           onBack={() => setStep('childSpeech')}
+          title="(배우자 재석 질문 · 문구 확정 대기)"
+          canProceed={spousePresent !== null}
+          onNext={() =>
+            setStep(
+              spousePresent === spousePresenceOptions[0] ? 'spouseAction' : 'share',
+            )
+          }
+        >
+          <CardChoiceList
+            options={spousePresenceOptions}
+            isSelected={(o) => spousePresent === o}
+            onSelect={setSpousePresent}
+          />
+        </QuestionStep>
+      )
+    }
+
+    // H - 아빠 행동 (순서대로) — 재석=있었음일 때만
+    case 'spouseAction':
+      return (
+        <QuestionStep
+          onBack={() => setStep('spousePresence')}
           title={c.spouseAction.question(spouseName)}
           sub={c.spouseAction.sub}
           canProceed={spouseActions.length > 0}
@@ -258,10 +289,10 @@ export default function ConflictScreen({
         </QuestionStep>
       )
 
-    // 부재자 공유 안내 — 이안이만 골랐을 때
+    // 부재자 공유 안내 — 재석=없었음일 때
     case 'share':
       return (
-        <PhoneFrame onBack={() => setStep('childSpeech')}>
+        <PhoneFrame onBack={() => setStep('spousePresence')}>
           <div>
             <h1 style={styles.question}>{texts.share.title}</h1>
             <p style={{ ...styles.subText, marginTop: '14px' }}>
