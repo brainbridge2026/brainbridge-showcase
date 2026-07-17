@@ -211,8 +211,15 @@ export default function App() {
   //   ReviewScreen/‘case review’ 코드는 삭제하지 않고 보존 — 향후 live(실동작) 모드에서
   //   "운영자 전용" 검토 화면으로 정식 분리 예정(딥링크 ?screen=review 로 여전히 접근 가능).
   const handleReview = () => {
-    // TODO(C-10): ②③ 관찰유형(childType/parentType 등)을 매칭 정교화에 활용 — 정식 파이프라인에서.
-    //  현재 matchTdToInput은 상황축(scene)만 사용. ②③ 값은 current에 저장돼 있으나 매칭엔 아직 미사용.
+    // [C-10] matchTdToInput은 current 객체 전체를 받는다. (임시 키워드/축 엔진 — 함수 내부만 추후 AI 매칭으로 교체)
+    //  매칭 점수에 실제 사용되는 필드: scene · childText · parentText
+    //    (matchTd.js에서 tokenize 후 title 토큰과 집합 교집합으로 점수 계산 — 10편 ②-3 이후 방식)
+    //  축 필터(pool 축소): patternAxis 우선, 없으면 childType. ⑦가중 트리거: parentType
+    //    ★ ⑦가중은 parentType 경로 — parentText와 다른 경로임에 주의(혼동 금지).
+    //  ★ 실측(2026-07-16/17 · docs 11_계측): parentText 기여 = 0.000 (rep/after/expand0 전부 동일).
+    //    원인=자산 어휘 계층 불일치(일상어 vs 임상 title). C-108 소관.
+    //  ★ childText 기여는 노이즈 제거(②dedupe+불용어+경계매칭) 후 오히려 하락: rep 0.45→0.125, expand[0] 0.000. 10편 참고.
+    // TODO(C-10): 함수 내부를 정식 AI 매칭(phase5_pipeline)으로 교체 — ②③ 관찰유형 활용 고도화는 그때.
     setMatchResult(matchTdToInput(current))
     setScreen('result') // [C-41] 'review'(운영자 검토) 스킵 → 다듬어진 결과로 직행
   }
