@@ -9,7 +9,7 @@ import behaviorPool from '../data/behaviorPool.json'
 //  데이터 출처: src/data/behaviorPool.json 의 [scene].parent (유형 4개, 각 rep 1 + expand 2).
 //  ★ 관찰 톤: 부모 행동도 잘잘못이 아니라 "무슨 일이 있었는지" 관찰(자책 유도 아님).
 //  선택 결과: { parentType: 유형키, parentText: 고른 문장 } — 전체 통틀어 단일 선택.
-export default function ParentBehaviorScreen({ scene, onBack, onNext }) {
+export default function ParentBehaviorScreen({ userName, scene, onBack, onNext }) {
   // 개발/딥링크 확인용: prop scene 이 없으면 URL ?scene= 로 대체(스크린샷용).
   const activeScene =
     scene ?? new URLSearchParams(window.location.search).get('scene')
@@ -18,10 +18,11 @@ export default function ParentBehaviorScreen({ scene, onBack, onNext }) {
 
   const [selected, setSelected] = useState(null) // { typeKey, text } | null
 
+  // C-115: 질문 주어 '나' → 주양육자 이름. p.question(name) 함수에 userName 주입(문구 정본은 texts.js).
   return (
     <QuestionStep
       onBack={onBack}
-      title={p.question}
+      title={p.question(userName)}
       sub={p.sub}
       canProceed={selected !== null}
       onNext={() =>

@@ -117,7 +117,10 @@ export const texts = {
   // ③ 부모 행동 관찰 선택 (빌드지시서 4편). 선택지=behaviorPool.json[scene].parent
   //  헤더는 관찰 톤(자책 유도 아님 — 지시서 §1-I). sub는 ②와 동일 톤 유지.
   parentBehavior: {
-    question: '그때 나는 어떻게 했나요?',
+    // C-115: 지침 §4 호칭 원칙 — '나' → 주양육자 이름.
+    //  userName prop 패턴은 MoodScreen·HomeScreen과 동일(주양육자는 familyMembers 밖,
+    //  App.jsx의 userName 모듈 상수가 소스).
+    question: (name) => `그때 ${name}님은 어떻게 하셨어요?`,
     sub: '가장 가까운 걸 하나만 골라주세요. 눌러서 더 자세히 고를 수도 있어요.',
     more: '더 자세히',
   },
@@ -160,20 +163,6 @@ export const texts = {
       amplifierOptions: [
         '같은 일이 자꾸 반복돼서',
         '그날따라 유난히 지치고 힘든 상태여서',
-      ],
-    },
-
-    // C - 내 대처 (순서대로)
-    coping: {
-      question: (name) => `그때 ${name}님은 어떻게 하셨어요?`,
-      sub: '하나만 해당돼도 괜찮고, 여러 가지였다면 하신 순서대로 골라주세요.',
-      options: [
-        '여러 번 말했어요',
-        '설명하려고 했어요',
-        '재촉했어요',
-        '화를 냈어요',
-        '그냥 대신 해줬어요',
-        '포기했어요',
       ],
     },
 

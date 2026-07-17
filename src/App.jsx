@@ -39,7 +39,7 @@ const APP_MODE = import.meta.env.VITE_APP_MODE === 'live' ? 'live' : 'showcase'
 function buildConflictData(c) {
   // [C-93] 개입자/마음 저장 갈래의 소스 = 재석 답(spousePresent).
   //  ★ 비교값 = ConflictScreen이 쓰는 SPOUSE_PRESENCE_OPTIONS[0](=있었음) 단일 정본.
-  //    spousePresent는 다른 스텝(coping/emotions 등)과 동일하게 '한국어 라벨 문자열'로 저장되므로
+  //    spousePresent는 다른 스텝(emotions 등)과 동일하게 '한국어 라벨 문자열'로 저장되므로
   //    (mood 같은 코드키 아님), 라벨→불리언 임의 변환 없이 그 라벨 상수를 그대로 비교한다.
   //    이렇게 하면 흐름 분기(ConflictScreen)와 저장 갈래(여기)가 같은 상수를 봐 드리프트가 없다.
   //  ※ null/미일치면 else(마음 갈래). spousePresence 스텝은 선택 필수라 정상 흐름에선 항상 둘 중 하나.
@@ -64,9 +64,8 @@ function buildConflictData(c) {
     childSpeech: c.childSpeech ?? [],
     // [임시공통] C-50·C-75·C-76·C-77 정식화 시 값 세트 교체(저장구조는 유지)
     expressions: c.expressions ?? [], // 회고② 내표현
-    // coping·intensity 정식 채택 확정(후속 반영). 저장구조 유지.
     // [임시공통] C-50 정식화 시 값 세트 교체(저장구조는 유지)
-    coping: c.coping ?? [], // 회고 내대처
+    coping: c.coping ?? [], // C-110: 회고 coping 스텝 폐기(정본 부재·매칭 미사용). 스키마 유지 위해 빈 배열 저장.
     intensity: c.intensity ?? null, // 감정칩 강도 (feeling 스텝의 일부)
     // [C-93] 배우자 재석 답 원답(라벨) 그대로 보존. 갈래 판정은 위 spouseWasPresent가 담당.
     spousePresent: c.spousePresent ?? null,
@@ -310,6 +309,7 @@ export default function App() {
     case 'parentBehavior':
       return (
         <ParentBehaviorScreen
+          userName={userName}
           scene={current?.scene}
           onBack={go('childBehavior')}
           onNext={handleParentNext}

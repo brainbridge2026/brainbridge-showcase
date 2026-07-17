@@ -15,7 +15,8 @@ import { findByRelation } from '../data/familyMembers'
 export const SPOUSE_PRESENCE_OPTIONS = texts.conflict.spousePresence.options
 
 // 깊은 회고 상세 입력 (시나리오 1: 아이가 주축). B부터 시작.
-// B reason → C coping → D feeling → E expression → F childReaction → G childSpeech
+// B reason → D feeling → E expression → F childReaction → G childSpeech
+//  (C 슬롯은 C-110에서 폐기 — reason 다음 바로 feeling)
 //   → ★ spousePresence (배우자 재석 질문, C-93) 에서 분기:
 //        재석=있었음 → H spouseAction → I spouseFeeling → onDone
 //        재석=없었음 → share (→ shareReason) → coaching → onDone
@@ -38,10 +39,9 @@ export default function ConflictScreen({ userName, scene, onBack, onDone }) {
 
   // 선택 상태
   // [C-53 해소] 회고① 트리거 2층(확정본 C). immediate=단일 즉시트리거 / amplifiers=복수 증폭배경.
-  //  ★ 값은 다른 스텝(coping/feeling/expression 등)과 동일하게 "한국어 라벨 문자열"로 저장(내부 키 아님).
+  //  ★ 값은 다른 스텝(feeling/expression 등)과 동일하게 "한국어 라벨 문자열"로 저장(내부 키 아님).
   //  이 객체가 6편(5-B)에서 conflict_input.data jsonb에 그대로 실림 — 저장 배선은 6편 소관, 여기선 로컬 state까지만.
   const [reason, setReason] = useState({ immediate: null, amplifiers: [] })
-  const [coping, setCoping] = useState([])
   const [emotions, setEmotions] = useState([])
   const [intensity, setIntensity] = useState(null)
   const [expressions, setExpressions] = useState([])
@@ -69,7 +69,6 @@ export default function ConflictScreen({ userName, scene, onBack, onDone }) {
   //    키 이름을 바꾸면 App 쪽 매핑도 함께 바꿔야 함(저장구조 정합).
   const collect = () => ({
     reason, // 회고①트리거 2층 {immediate, amplifiers}
-    coping, // 회고 내대처
     emotions, // 회고④ 감정칩(순서)
     intensity, // 감정칩 강도
     expressions, // 회고② 내표현
@@ -91,7 +90,7 @@ export default function ConflictScreen({ userName, scene, onBack, onDone }) {
           title={c.reason.question(scene)}
           sub={c.reason.sub}
           canProceed={reason.immediate !== null} // 상단 1개 필수, 하단은 선택
-          onNext={() => setStep('coping')}
+          onNext={() => setStep('feeling')} // C-110: coping 스텝 폐기로 reason↔feeling 직결
         >
           {/* 상단 — 즉시 트리거 (단일선택 · 라디오 방식) */}
           <div style={styles.choiceList}>
@@ -138,29 +137,11 @@ export default function ConflictScreen({ userName, scene, onBack, onDone }) {
         </QuestionStep>
       )
 
-    // C - 내 대처 (순서대로)
-    case 'coping':
-      return (
-        <QuestionStep
-          onBack={() => setStep('reason')}
-          title={c.coping.question(userName)}
-          sub={c.coping.sub}
-          canProceed={coping.length > 0}
-          onNext={() => setStep('feeling')}
-        >
-          <OrderedCardList
-            options={c.coping.options}
-            order={coping}
-            onToggle={toggle(setCoping)}
-          />
-        </QuestionStep>
-      )
-
     // D - 내 감정(순서대로) + 강도(단일)
     case 'feeling':
       return (
         <QuestionStep
-          onBack={() => setStep('coping')}
+          onBack={() => setStep('reason')} // C-110: coping 스텝 폐기로 reason↔feeling 직결
           title={c.feeling.question(userName)}
           sub={c.feeling.sub}
           canProceed={emotions.length > 0 && intensity !== null}
