@@ -86,6 +86,13 @@ export function matchTdToInput(answers, { format = 'adult' } = {}) {
       const axes = CHILD_TYPE_TO_AXIS[answers.childType]
       axisNums = axes.flatMap((ax) => sceneMap[ax] ?? [])
     }
+    // [C-109] ⑦축 입구 — parentType이 확인·개입 3종이면 축7 td를 pool에 합집합으로 추가.
+    //  근거: C-84 §4 "⑦은 부모 행동이 입구가 되는 최초의 축". 12편 B2 실측 채택
+    //  (unmatched 70%→10%, tiedAtTop B1 80% vs B2 65%).
+    //  ★ B1(교집합=축7만)이 아닌 이유: childType 축을 폐기하면 아이 신호가 죽음. 정본이 요구한 적 없음.
+    if (PARENT_WEIGHT_TYPES.includes(answers?.parentType)) {
+      axisNums = [...(axisNums ?? []), ...(sceneMap['7'] ?? [])]
+    }
     // 방어(§4-3): axisNums 없음/빈배열(예: 스마트폰 축"7"=[]) → 축소 건너뛰고 상위 pool 유지(빈 pool 금지).
     if (axisNums && axisNums.length > 0) {
       const axisSet = new Set(axisNums)
