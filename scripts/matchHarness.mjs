@@ -120,8 +120,10 @@ function statOf(rs) {
     integrity: matched + unmatched === n, // matched + unmatched = 표본 수 성립 검사
     tiedRaw3,
     tiedRaw3Rate: pct(tiedRaw3, n),
+    // [PM QA MAJOR] matched-only 비율의 분모 = matched 건수(n 아님). matched=0이면 N/A(0% 아님).
     tiedMatched3,
-    tiedMatched3Rate: pct(tiedMatched3, n),
+    tiedMatched3Denominator: matched,
+    tiedMatched3Rate: matched ? pct(tiedMatched3, matched) : 'N/A',
     scoreDist: { '0': s0, '1': s1, '2+': s2plus },
     weightAppliedAvg: +waAvg.toFixed(3),
     weightAppliedZero: waZero,
@@ -204,7 +206,7 @@ function statTableHeader() {
 function statRow(label, s) {
   P(
     `| ${label} | ${s.n} | ${s.matched} (${s.matchedRate}) | ${s.unmatched} (${s.unmatchedRate}) | ` +
-      `${s.tiedRaw3} (${s.tiedRaw3Rate}) | ${s.tiedMatched3} (${s.tiedMatched3Rate}) | ` +
+      `${s.tiedRaw3} (${s.tiedRaw3Rate}) | ${s.tiedMatched3}/${s.tiedMatched3Denominator} (${s.tiedMatched3Rate}) | ` +
       `${s.scoreDist['0']} | ${s.scoreDist['1']} | ${s.scoreDist['2+']} | ` +
       `${s.weightAppliedAvg} | ${s.weightAppliedZero} (${s.weightAppliedZeroRate}) | ${JSON.stringify(s.weightAppliedDist)} |`
   )
