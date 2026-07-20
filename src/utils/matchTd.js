@@ -1,6 +1,7 @@
 import catalog from '../data/tdCatalog.json'
 import situationToTd from '../data/situationToTd.json'
 import childTypeToAxis from '../data/childTypeToAxis.json'
+import parentTypeToTd from '../data/parentTypeToTd.json'
 
 // 모든 td를 평평하게 편다 → { num, title, format }
 const ALL_TDS = catalog.categories.flatMap((c) => c.items)
@@ -11,6 +12,10 @@ const SITUATION_MAP = Object.fromEntries(
 )
 const CHILD_TYPE_TO_AXIS = Object.fromEntries(
   Object.entries(childTypeToAxis).filter(([k]) => !k.startsWith('_')),
+)
+// [C-118] parentType(부모행동 typeKey) → 지정 TD 1개. C-85 §3-B 확정 매핑(이 3개만).
+const PARENT_TYPE_TO_TD = Object.fromEntries(
+  Object.entries(parentTypeToTd).filter(([k]) => !k.startsWith('_')),
 )
 
 // ⑦ 부모 확인·개입 축 가중 대상 (behaviorPool ③ parent typeKey). 확정 아님 — 점수만 가산.
@@ -128,6 +133,18 @@ export function matchTdToInput(answers, { format = 'adult' } = {}) {
   // [계측 전용 · C-10 baseline] ⑦가중(+1)이 실제 적용될 td 수 = pool ∩ weightSet.
   const weightApplied = pool.filter((td) => weightSet.has(td.num)).length
 
+  // [C-118] 지정 TD 추가 bonus(+1) — 선택된 parentType의 지정 TD 한 개에만.
+  //  C-109 공통 축7 +1(위 weightSet)은 유지하고, 그 위에 지정 TD 1개에만 +1을 더해 총 2점 → 단독 top1.
+  //  근거: C-85 §3-B(확인·점검→td34 / 대신해줬→td57 / 여러 번→td67). 비가중 4종은 매핑 없음 → null.
+  //  ★ 지정 TD가 축소된 pool에 실제로 있을 때만 적용(스마트폰 축7=[] → 지정 TD pool 부재 → 미적용·unmatched 유지).
+  const parentTypeTargetTd =
+    sceneMap && PARENT_WEIGHT_TYPES.includes(answers?.parentType)
+      ? PARENT_TYPE_TO_TD[answers.parentType] ?? null
+      : null
+  const parentTypeBonusApplied =
+    parentTypeTargetTd != null && pool.some((td) => td.num === parentTypeTargetTd)
+  const parentTypeBonusValue = parentTypeBonusApplied ? 1 : 0
+
   // (5) 키워드 점수 매칭 (축소된 pool 안에서). ★ note 제거(죽은 필드), childText·parentText 추가.
   const text = [scene, answers?.childText, answers?.parentText].filter(Boolean).join(' ')
   // 토큰화: tokenize()(가운뎃점·공백·기호 분리 · 2글자↑ · STOPWORDS 제외) + ②-1 중복 제거(Set).
@@ -141,6 +158,7 @@ export function matchTdToInput(answers, { format = 'adult' } = {}) {
     const titleTokens = new Set(tokenize(td.title ?? ''))
     let score = tokens.filter((tk) => titleTokens.has(tk)).length
     if (weightSet.has(td.num)) score += 1 // ⑦ 가중(점수만) — 무변경
+    if (td.num === parentTypeTargetTd) score += 1 // [C-118] 지정 TD 추가 bonus(+1)
     if (!best || score > best.score) best = { ...td, score } // tie-break 무변경
   }
   // ─── [계측 전용 · C-10 baseline] 판정에 영향 없음. 관찰값만 계산해 _metrics로 반환. ───
@@ -152,6 +170,7 @@ export function matchTdToInput(answers, { format = 'adult' } = {}) {
     const titleTokens = new Set(tokenize(td.title ?? ''))
     let s = tokens.filter((tk) => titleTokens.has(tk)).length
     if (weightSet.has(td.num)) s += 1
+    if (td.num === parentTypeTargetTd) s += 1 // [C-118] 지정 TD 추가 bonus(+1) — 관측도 동일
     return { num: td.num, score: s }
   })
   const _sorted = [..._scored].sort((a, b) => b.score - a.score)
@@ -187,6 +206,10 @@ export function matchTdToInput(answers, { format = 'adult' } = {}) {
     },
     matchedTokens: [...new Set([..._sceneOv, ..._childOv, ..._parentOv])],
     weightApplied,
+    // [C-118] parentType 지정 TD 계측
+    parentTypeTargetTd,
+    parentTypeBonusApplied,
+    parentTypeBonusValue,
     result: best && best.score > 0 ? 'matched' : 'unmatched',
   }
 
