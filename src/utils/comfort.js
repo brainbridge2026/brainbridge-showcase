@@ -23,13 +23,31 @@ export function pickReassure(pool) {
   return picked
 }
 
-// 반복인정 — 같은 td 완료 건수(이번 건 포함) 기준 구간 문구 1개.
-//  count<2면 null(반복 데이터 없음 → 생략, 무추론). 구간(tier)이 바뀔 때만 달라짐(풀 로테이션 대상 아님).
-export function pickRepeatAck(repeatAck, sameTdCount) {
-  let tierPool = null
-  if (sameTdCount === 2) tierPool = repeatAck.tier2
-  else if (sameTdCount === 3 || sameTdCount === 4) tierPool = repeatAck.tier3_4
-  else if (sameTdCount >= 5) tierPool = repeatAck.tier5plus
+// 반복인정 tier 키 — 같은 td 완료 건수(이번 건 포함) 구간. count<2면 null(반복 데이터 없음 → 생략).
+function repeatTierKey(sameTdCount) {
+  if (sameTdCount === 2) return 'tier2'
+  if (sameTdCount === 3 || sameTdCount === 4) return 'tier3_4'
+  if (sameTdCount >= 5) return 'tier5plus'
+  return null
+}
+
+// 활성 세션 반복인정 안정 캐시 — (tdNum + tier)별 최초 선택 문구를 고정.
+//  ★ 반복인정은 풀 로테이션 대상이 아니다: 같은 td·같은 tier로 재진입하면 동일 문구,
+//    반복 횟수가 다른 tier로 이동했을 때만 그 tier의 새 문구를 선택한다.
+//  새로고침 시 모듈 리셋 → 영속 X(부모위로풀 로테이션과 동일 세션 범위).
+const repeatAckCache = {}
+
+// 반복인정 — 같은 td 완료 건수 기준 구간 문구 1개. (tdNum + tier) 기준 세션 내 안정 유지.
+//  count<2면 null(생략, 무추론). 구간(tier)이 바뀔 때만 새 문구(풀 로테이션 대상 아님).
+export function pickRepeatAck(repeatAck, sameTdCount, tdNum) {
+  const tier = repeatTierKey(sameTdCount)
+  if (!tier) return null
+  const tierPool = repeatAck[tier]
   if (!tierPool || !tierPool.length) return null
-  return tierPool[Math.floor(Math.random() * tierPool.length)]
+  const cacheKey = `td${tdNum}:${tier}`
+  // 같은 td·같은 tier면 세션 최초 선택을 그대로 반환(재진입해도 불변).
+  if (repeatAckCache[cacheKey] != null) return repeatAckCache[cacheKey]
+  const picked = tierPool[Math.floor(Math.random() * tierPool.length)]
+  repeatAckCache[cacheKey] = picked
+  return picked
 }

@@ -84,7 +84,8 @@ export default function MissionScreen({ userName, tdNumber, cases, onBack, onHom
     const sameTdCount = (cases ?? [])
       .filter((cc) => cc?.status === 'complete')
       .filter((cc) => matchTdToInput(cc).num === tdNum).length
-    const ack = pickRepeatAck(repeatAck, sameTdCount)
+    // [C-116] (tdNum + tier) 기준 세션 안정 — 같은 td·같은 tier 재진입 시 동일 문구, tier 변할 때만 변경.
+    const ack = pickRepeatAck(repeatAck, sameTdCount, tdNum)
     setRepeatAckText(ack ? fill(ack) : null)
 
     // 부모위로풀 — 카테고리 매핑 있는 td만. 아동풀 혼입 0(부모용 public/reassurePools.json).
