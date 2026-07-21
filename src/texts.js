@@ -136,9 +136,36 @@ export const texts = {
     ],
   },
 
-  // 지금 마음 분기 placeholder
-  accept: { title: '마음을 먼저 받아드릴게요', note: '(이어서 만들 예정)' },
-  shallow: { title: '여기까지도 충분해요', note: '(이어서 만들 예정)' },
+  // [C-105] 뜨거움(hard) 받아주기 화면 — §611 3기능 분리·masterplan §786·§787(폐기 문구 교체)·§788·§803.
+  //  ★ 호칭은 {name} 동적(하드코딩 금지 · P-32). 문구 전량 GPT PM 최종 확정본(Build Pack v2_r1 §2-A).
+  accept: {
+    title: '먼저, 지금 마음부터요', // §787 폐기 제목("지금은 좀 힘드시겠어요") 교체
+    body: (name) =>
+      `지금 ${name}님 마음이 많이 벅찰 수 있어요. 서두르지 않고, 그 마음부터 들을게요.`, // §786 (분석·임상어 없음)
+    question: (name) => `지금 ${name}님에게는 어떤 게 도움이 될까요?`, // §786
+    options: [
+      '그냥 들어주면 좋겠어요', // ① 들어주기
+      '여기서 잠깐 멈출게요', // ② 멈추기
+      '이어서 조금 더 볼게요', // ③ 이어서 보기 → C-25 얕은 회고(자발 이동)
+    ],
+    // ① 선택 후 — 자유입력 + 제출 → §788 마무리 → 홈
+    listenPlaceholder: '지금 떠오르는 마음, 그대로 적으셔도 돼요', // §785
+    listenSubmit: '적었어요',
+    listenDone: '적어주셔서 고마워요. 지금 그 마음 그대로도 괜찮아요', // §788 마무리
+    // ② 선택 후 — §803 선택권 문구 → 홈
+    pauseNote: '안 하셔도 괜찮아요. 마음이 편해지면 언제든 이어갈 수 있어요', // §803
+    home: '홈으로',
+  },
+
+  // [C-25] 얕은 회고(settling) — 문장빌더는 '내 표현'·'아이 반응' 화면 상단 인라인(전용 화면 없음).
+  //  ★ 신규 문구는 §801 안심 문구 + §798 중단/이어서 버튼뿐(Build Pack v2_r1 §2-B). 그 외 0.
+  //  질문·선택지는 conflict.expression / conflict.childReaction / conflict.feeling 확정 자산 재사용.
+  shallow: {
+    reassure: '오늘은 여기까지도 충분해요. 지금 주신 것만으로도 정리해드릴 수 있어요', // §801-1 안심 문구
+    stop: '여기까지 할게요', // §798 중단 → (②까지 입력 시) 번역/결과
+    continue: '조금 더 이어서', // §798 이어서 → ④ 내 감정
+    home: '홈으로',
+  },
 
   // === 깊은 회고 상세 입력 (시나리오 1: 아이가 주축) ===
   // child: 아이 이름, spouse: 배우자 이름, name: 사용자 이름
@@ -452,11 +479,20 @@ export const texts = {
     missionTitle: '오늘의 데일리 미션',
     missionLink: '오늘의 데일리 미션 보기',
 
-    // 안 했을 때 위로 — 한 장씩 순서대로. (문구는 data/comfortMessages.js)
-    comfort: {
-      title: '오늘 못 했더라도',
-      next: '다른 위로도 보기',
+    // [C-114] 미션 3질문 답변 — ReportScreen 3버튼+자유입력 계약(report.feedback) 그대로 재사용.
+    //  효과확인·변화·회고 각각 별도 state 키(덮어쓰기 없음). 버튼·placeholder는 report.feedback 재사용.
+    //  ★ showcase: 답변 저장·영속화 N/A(로컬 state까지만).
+    missionAnswers: {
+      heading: '미션을 해보고, 짧게 남겨볼까요?',
+      questions: [
+        { key: 'effect', label: '오늘 미션, 한번 해보셨어요?' }, // 효과확인
+        { key: 'change', label: '해보니 달라진 게 있었나요?' }, // 변화
+        { key: 'reflect', label: '미션을 하면서 어떤 마음이 드셨어요?' }, // 회고
+      ],
     },
+
+    // [C-116] 미션 위로 자동 로테이션 — ResultScreen의 reassureText(부모위로풀)·repeatAckText(반복인정)
+    //  두 상태·생성·소비 경로를 재사용. 버튼·카운터·풀 크기 노출 0(자동 1개, '다른 위로 보기' 폐기).
 
     // 하단 버튼
     backToResult: '내 리포트로 돌아가기',

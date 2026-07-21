@@ -19,6 +19,8 @@ import ReviewScreen from './screens/ReviewScreen'
 import SpouseResultScreen from './screens/SpouseResultScreen'
 import AnotherAskScreen from './screens/AnotherAskScreen'
 import BurnoutScreen from './screens/BurnoutScreen'
+import AcceptScreen from './screens/AcceptScreen'
+import ShallowRetroScreen from './screens/ShallowRetroScreen'
 import { texts } from './texts'
 import { findByRelation } from './data/familyMembers'
 import { matchTdToInput } from './utils/matchTd'
@@ -185,6 +187,33 @@ export default function App() {
     setScreen('conflict')
   }
 
+  // [C-105] hard 받아주기 — ①submit·② 선택 시 이 건을 미완료(홈 재개 카드)로 표시(§793).
+  //  재개점 stoppedAt='mood'(기존 hard 재개 규칙과 동일 — '지금 마음' 화면부터).
+  const deferHardCase = () => {
+    const c = { ...current, mood: 'hard', status: 'incomplete', stoppedAt: 'mood' }
+    upsertCase(c)
+    setCurrent(c)
+  }
+
+  // [C-105] ③ '이어서 조금 더 볼게요' — 사용자가 자발적으로 C-25 얕은 회고로 이동(홈 아님·강제 아님).
+  //  얕은 회고 중단 시 재개 규칙 적용 위해 stoppedAt='shallow'로 미완료 표시.
+  const continueToRetro = () => {
+    const c = { ...current, status: 'incomplete', stoppedAt: 'shallow' }
+    upsertCase(c)
+    setCurrent(c)
+    setScreen('shallow')
+  }
+
+  // [C-25] 얕은 회고 종료 → 회고 입력 취합 후 매칭 → 번역/결과로.
+  //  ★ 건은 미완료 유지 → 홈에 '차분히 얘기할 수 있어요' 재개 카드 존속(§799 남은 것 이어받기).
+  const handleShallowDone = (retro = {}) => {
+    const c = { ...current, ...retro }
+    upsertCase(c)
+    setCurrent(c)
+    setMatchResult(matchTdToInput(c))
+    setScreen('result')
+  }
+
   // 깊은회고 완료 — ConflictScreen 각 스텝값(retro)을 current 로 취합(§0-(1)) 후,
   //  [SHOWCASE/LIVE 분기] live 모드일 때만 conflict_input.data(jsonb)에 저장. 매칭·리포트는 분기 밖(공통).
   const completeCurrent = (retro = {}) => {
@@ -321,29 +350,37 @@ export default function App() {
         <MoodScreen
           userName={userName}
           onBack={go('situation')}
-          // [DEMO-ONLY] C-25: hot_only(hard)는 'accept' 대신 홈으로. 재개점은 'mood'.
-          onHard={() => deferCase('hard', 'mood', 'home')}
-          // [DEMO-ONLY] C-25: minimum(settling)은 shallow로, 재개점도 'shallow'.
+          // [C-105] hard → 받아주기 화면(accept). 홈 직행 폐기 — §611 3기능은 accept 화면에서 분기.
+          onHard={() => {
+            setCurrent({ ...current, mood: 'hard' })
+            setScreen('accept')
+          }}
+          // [C-25] minimum(settling)은 shallow(얕은 회고)로, 재개점도 'shallow'. 진입 즉시 미완료(홈 재개 생성).
           onSettling={() => deferCase('settling', 'shallow', 'shallow')}
           onCalm={handleCalm}
         />
       )
 
+    // [C-105] 뜨거움 받아주기 — §611 3기능 분기(들어주기/멈추기/이어서 보기).
     case 'accept':
       return (
-        <PlaceholderScreen
+        <AcceptScreen
+          userName={userName}
           onBack={go('mood')}
-          title={texts.accept.title}
-          note={texts.accept.note}
+          onDefer={deferHardCase}
+          onContinue={continueToRetro}
+          onHome={go('home')}
         />
       )
 
+    // [C-25] 얕은 회고(settling) 실구현 — 내 표현→아이 반응→중단/이어서→(이어서)내 감정.
+    //  ★ §2-B "② 이전 중단이면 홈으로": 내 표현(②이전) 단계 이탈 = 홈. (건은 진입 시 이미 미완료 → 재개 카드 존속)
     case 'shallow':
       return (
-        <PlaceholderScreen
-          onBack={go('mood')}
-          title={texts.shallow.title}
-          note={texts.shallow.note}
+        <ShallowRetroScreen
+          userName={userName}
+          onBack={go('home')}
+          onDone={handleShallowDone}
         />
       )
 
@@ -415,7 +452,9 @@ export default function App() {
     case 'mission':
       return (
         <MissionScreen
+          userName={userName}
           tdNumber={matchResult?.num}
+          cases={cases}
           onBack={go('report')}
           onHome={go('home')}
         />
