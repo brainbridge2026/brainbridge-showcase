@@ -20,7 +20,6 @@ import SpouseResultScreen from './screens/SpouseResultScreen'
 import AnotherAskScreen from './screens/AnotherAskScreen'
 import BurnoutScreen from './screens/BurnoutScreen'
 import AcceptScreen from './screens/AcceptScreen'
-import ShallowRetroScreen from './screens/ShallowRetroScreen'
 import { texts } from './texts'
 import { findByRelation } from './data/familyMembers'
 import { matchTdToInput } from './utils/matchTd'
@@ -97,6 +96,8 @@ export default function App() {
   const [cases, setCases] = useState([]) // 완료/미완료 건 목록
   const [current, setCurrent] = useState(null) // 지금 편집 중인 건
   const [conflictBack, setConflictBack] = useState('mood') // 깊은회고 뒤로 목적지
+  // [C-25 정정] 회고 모드 — 'calm'(깊은 회고 바로) | 'settling'(사실 먼저 + 감정 조절 텀 후 깊은 회고 합류).
+  const [retroMode, setRetroMode] = useState('calm')
   const [matchResult, setMatchResult] = useState(null) // matchTdToInput 결과 {num,title,...}
 
   // 보는 사람. ?viewer=spouse 로 진입하면 정민님(배우자) 경로로 흐른다.
@@ -171,18 +172,18 @@ export default function App() {
     setScreen('mood')
   }
 
-  // 지금 마음: 미룸(hard/settling)이면 미완료로 저장하며 "멈춘 지점(stoppedAt)"을 기록.
-  //  [DEMO-ONLY] C-25: 재개 시 건 처음이 아니라 이 지점부터 이어가려고 stoppedAt를 남긴다.
-  //    hot_only(hard)    → 'mood'   (뜨거움 체크 전, '지금 마음' 화면부터)
-  //    minimum(settling) → 'shallow'(트리거·자유서술 남은 부분부터)
-  const deferCase = (moodKind, stoppedAt, nextScreen) => {
-    const c = { ...current, mood: moodKind, status: 'incomplete', stoppedAt }
-    upsertCase(c)
-    setCurrent(c)
-    setScreen(nextScreen)
+  // [C-25 정정] settling = 감정 조절 텀이 있는 깊은 회고. 사실 먼저(내 표현·아이 반응) 입력하도록
+  //  ConflictScreen(mode='settling')에 진입. 응답은 깊은 회고와 동일한 회고 필드로 저장(별도 데이터 없음).
+  //  ★ 진입 시 미완료 표시하지 않는다 — 홈 재개 상태는 감정 조절 텀의 "여기까지 할게요"에서만 생성.
+  const startSettlingRetro = () => {
+    setCurrent({ ...current, mood: 'settling' })
+    setRetroMode('settling')
+    setConflictBack('mood')
+    setScreen('conflict')
   }
   const handleCalm = () => {
     setCurrent({ ...current, mood: 'calm' })
+    setRetroMode('calm')
     setConflictBack('mood')
     setScreen('conflict')
   }
@@ -195,23 +196,21 @@ export default function App() {
     setCurrent(c)
   }
 
-  // [C-105] ③ '이어서 조금 더 볼게요' — 사용자가 자발적으로 C-25 얕은 회고로 이동(홈 아님·강제 아님).
-  //  얕은 회고 중단 시 재개 규칙 적용 위해 stoppedAt='shallow'로 미완료 표시.
+  // [C-105] ③ '이어서 조금 더 볼게요' — 자발적으로 동일한 C-25 흐름(settling 회고)으로 합류.
+  //  ★ mood는 그대로 두고(하드에서 넘어옴) 회고 모드만 settling. 얕은/깊은 회고 파이프라인 동일.
   const continueToRetro = () => {
-    const c = { ...current, status: 'incomplete', stoppedAt: 'shallow' }
-    upsertCase(c)
-    setCurrent(c)
-    setScreen('shallow')
+    setRetroMode('settling')
+    setConflictBack('mood')
+    setScreen('conflict')
   }
 
-  // [C-25] 얕은 회고 종료 → 회고 입력 취합 후 매칭 → 번역/결과로.
-  //  ★ 건은 미완료 유지 → 홈에 '차분히 얘기할 수 있어요' 재개 카드 존속(§799 남은 것 이어받기).
-  const handleShallowDone = (retro = {}) => {
-    const c = { ...current, ...retro }
+  // [C-25 정정] 감정 조절 텀 "여기까지 할게요" — 현재 응답 병합·incomplete 저장·홈 재개 상태 생성 후 홈.
+  //  ★ TD 매칭·결과 이동 없음. 재개 지점 stoppedAt='conflict' → 홈에서 깊은 회고 첫 미응답 질문으로 복귀.
+  const handleRetroStop = (retro = {}) => {
+    const c = { ...current, ...retro, status: 'incomplete', stoppedAt: 'conflict' }
     upsertCase(c)
     setCurrent(c)
-    setMatchResult(matchTdToInput(c))
-    setScreen('result')
+    setScreen('home')
   }
 
   // 깊은회고 완료 — ConflictScreen 각 스텝값(retro)을 current 로 취합(§0-(1)) 후,
@@ -258,12 +257,20 @@ export default function App() {
   }
 
   // 홈 이어하기: [DEMO-ONLY] C-25 — 건 단위가 아니라 저장된 "멈춘 지점(stoppedAt)"부터 재개.
-  //  mood:'calm' 강제 덮어쓰기 없이 실제 저장 상태(mood/scene 등)를 그대로 복원한다.
+  //  mood:'calm' 강제 덮어쓰기 없이 실제 저장 상태(mood/scene/회고필드 등)를 그대로 복원한다.
+  //  ★ [C-25 정정] 회고 재개(stoppedAt='conflict')는 저장된 회고 응답을 seed로 ConflictScreen에 넘겨
+  //    깊은 회고의 첫 미응답 질문부터 진행한다(감정 조절 텀 재노출 없음·중복 질문 없음). 뒤로=홈.
   const handleResume = (id) => {
     const c = cases.find((x) => x.id === id)
     if (!c) return
+    // 레거시/구 stoppedAt('shallow')은 회고 재개로 흡수.
+    const target = c.stoppedAt === 'shallow' ? 'conflict' : c.stoppedAt ?? 'conflict'
     setCurrent(c)
-    setScreen(c.stoppedAt ?? 'conflict') // 지점 없으면(레거시 건) 기존 깊은회고로 폴백
+    if (target === 'conflict') {
+      setRetroMode('settling')
+      setConflictBack('home')
+    }
+    setScreen(target)
   }
 
   const resumeItems = incompleteCases.map((c) => ({
@@ -355,8 +362,8 @@ export default function App() {
             setCurrent({ ...current, mood: 'hard' })
             setScreen('accept')
           }}
-          // [C-25] minimum(settling)은 shallow(얕은 회고)로, 재개점도 'shallow'. 진입 즉시 미완료(홈 재개 생성).
-          onSettling={() => deferCase('settling', 'shallow', 'shallow')}
+          // [C-25 정정] settling → 감정 조절 텀이 있는 깊은 회고(ConflictScreen mode='settling'). 축약 결과 경로 폐기.
+          onSettling={startSettlingRetro}
           onCalm={handleCalm}
         />
       )
@@ -373,23 +380,18 @@ export default function App() {
         />
       )
 
-    // [C-25] 얕은 회고(settling) 실구현 — 내 표현→아이 반응→중단/이어서→(이어서)내 감정.
-    //  ★ §2-B "② 이전 중단이면 홈으로": 내 표현(②이전) 단계 이탈 = 홈. (건은 진입 시 이미 미완료 → 재개 카드 존속)
-    case 'shallow':
-      return (
-        <ShallowRetroScreen
-          userName={userName}
-          onBack={go('home')}
-          onDone={handleShallowDone}
-        />
-      )
-
+    // [C-25 정정] settling·calm·재개·C-105③ 모두 ConflictScreen(깊은 회고) 하나로 합류.
+    //  mode=settling이면 사실 먼저 + 감정 조절 텀(pause). initial=current로 이미 답한 회고 필드 seed(중복 질문 방지).
+    //  onStop=감정 조절 텀 "여기까지 할게요"(홈 재개). onDone=기존 완료 함수(부재자 확인·공유 후 결과·매칭 1회).
     case 'conflict':
       return (
         <ConflictScreen
           userName={userName}
           scene={current?.scene}
+          mode={retroMode}
+          initial={current ?? {}}
           onBack={go(conflictBack)}
+          onStop={handleRetroStop}
           onDone={completeCurrent}
         />
       )

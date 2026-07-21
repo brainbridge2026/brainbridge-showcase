@@ -7,6 +7,7 @@ import OrderedChipGroup from '../components/OrderedChipGroup'
 import { styles } from '../theme'
 import { texts } from '../texts'
 import { findByRelation } from '../data/familyMembers'
+import { buildRetroSequence, retroNext, retroPrev } from '../utils/retroFlow'
 
 // [C-93] 배우자 재석 선택지 — 순서 = [있었음, 없었음]. 라벨 문자열이 곧 저장값(다른 스텝과 동일 패턴).
 //  ★ 단일 정본 = texts.conflict.spousePresence.options(확정본 문구). 흐름 분기(아래 spousePresence 스텝)와
@@ -14,46 +15,52 @@ import { findByRelation } from '../data/familyMembers'
 //    참조한다(App은 이 상수를 import). 상수 하나만 보므로 두 곳이 어긋나지 않는다.
 export const SPOUSE_PRESENCE_OPTIONS = texts.conflict.spousePresence.options
 
-// 깊은 회고 상세 입력 (시나리오 1: 아이가 주축). B부터 시작.
-// B reason → D feeling → E expression → F childReaction → G childSpeech
-//  (C 슬롯은 C-110에서 폐기 — reason 다음 바로 feeling)
-//   → ★ spousePresence (배우자 재석 질문, C-93) 에서 분기:
-//        재석=있었음 → H spouseAction → I spouseFeeling → onDone
-//        재석=없었음 → share (→ shareReason) → coaching → onDone
+// 깊은 회고 상세 입력 (시나리오 1: 아이가 주축).
+// [C-25 정정] 깊은 회고 = 얕은 회고 + 중간 감정 조절 텀. 하나의 화면·데이터 계약을 공유한다.
+//  - mode='calm'    : 기존 깊은 회고. reason → feeling → expression → childReaction → childSpeech
+//                     → spousePresence → (분기).
+//  - mode='settling': 사실 먼저(expression → childReaction) → 감정 조절 텀(pause) → 나머지 깊은 회고 합류.
+//     · pause에서 "여기까지 할게요" → onStop(현재 응답 병합·incomplete·홈 재개). TD 매칭·결과 이동 없음.
+//     · pause에서 "조금 더 이어서" → 깊은 회고의 첫 미응답 질문으로 합류.
+//  - initial(재개/이어서): 이미 답한 회고 필드를 seed로 받아 그 스텝을 건너뛰고 첫 미응답부터 진행.
+//    seed는 깊은 회고와 동일한 회고 필드(expressions·childReactions 등)에 저장된다(별도 데이터 아님).
+//  ★ 전체 회고 완료 → onDone(collect())로 기존 완료 함수 진입 → 부재자 확인·공유 후 결과. 매칭 1회.
 // scene: 앞에서 고른 상황.
-// [C-93] 배우자 재석 여부는 who가 아니라 이 화면의 spousePresence 스텝이 결정한다.
-//   (예전엔 who 다중선택 → spouseIncluded prop 이었음. 소스가 이 스텝으로 이관돼 prop은 더 안 받음.)
-export default function ConflictScreen({ userName, scene, onBack, onDone }) {
+export default function ConflictScreen({
+  userName,
+  scene,
+  mode = 'calm',
+  initial = {},
+  onBack,
+  onStop,
+  onDone,
+}) {
   const childName = findByRelation('아이')?.name ?? '아이'
   const spouseName = findByRelation('배우자')?.name ?? '배우자'
   // [C-93] 재석 질문(spousePresence)만 givenName 호명('정민님')을 쓴다 — spouseOnlyNotice와 정합.
-  //  ★ familiar() 미적용: 질문 리터럴이 `${spouse}님`(존칭 '님')이라 이름을 그대로 넣어야 한다.
-  //    givenName '정민'은 받침(ㄴ)이라 familiar()를 걸면 '정민이' → "정민이님도"로 오적용되므로 금지.
-  //    (familiar는 '님' 없는 비존칭 호명에 '이'를 붙이는 헬퍼 — 여기 레지스터와 안 맞음.)
-  //  ★ H·I(spouseAction/spouseFeeling)의 name 호명('아빠')은 이번 범위 밖(C-99) → spouseName 그대로 둠.
   const spouseGivenName = findByRelation('배우자')?.givenName ?? spouseName
   const c = texts.conflict
 
-  const [step, setStep] = useState('reason')
+  // [C-25 정정] 표시할 스텝 순서 — mode + seed(initial)로 결정(순수 로직은 utils/retroFlow).
+  const sequence = buildRetroSequence(mode, initial)
+
+  const [step, setStep] = useState(sequence[0])
   const [coachingBack, setCoachingBack] = useState('share')
 
-  // 선택 상태
-  // [C-53 해소] 회고① 트리거 2층(확정본 C). immediate=단일 즉시트리거 / amplifiers=복수 증폭배경.
-  //  ★ 값은 다른 스텝(feeling/expression 등)과 동일하게 "한국어 라벨 문자열"로 저장(내부 키 아님).
-  //  이 객체가 6편(5-B)에서 conflict_input.data jsonb에 그대로 실림 — 저장 배선은 6편 소관, 여기선 로컬 state까지만.
-  const [reason, setReason] = useState({ immediate: null, amplifiers: [] })
-  const [emotions, setEmotions] = useState([])
-  const [intensity, setIntensity] = useState(null)
-  const [expressions, setExpressions] = useState([])
-  const [childReactions, setChildReactions] = useState([])
-  const [childSpeech, setChildSpeech] = useState([])
-  const [spouseActions, setSpouseActions] = useState([])
-  const [spouseEmotions, setSpouseEmotions] = useState([])
-  const [shareReasons, setShareReasons] = useState([])
-  // [5-B §1-E] 공유/미공유 갈래 표시 — 인벤토리상 "선택 안 담김"이라 저장되게 추가. 'shared' | 'notShared'
-  const [shareChoice, setShareChoice] = useState(null)
-  // [C-93] 배우자 재석 답 — spousePresence 스텝에서 선택. spouseAction/share 갈래의 소스.
-  const [spousePresent, setSpousePresent] = useState(null)
+  // 선택 상태 — initial(seed)로 초기화. calm 신규는 initial 비어 있어 전부 기본값(기존 동작).
+  const [reason, setReason] = useState(
+    initial.reason ?? { immediate: null, amplifiers: [] },
+  )
+  const [emotions, setEmotions] = useState(initial.emotions ?? [])
+  const [intensity, setIntensity] = useState(initial.intensity ?? null)
+  const [expressions, setExpressions] = useState(initial.expressions ?? [])
+  const [childReactions, setChildReactions] = useState(initial.childReactions ?? [])
+  const [childSpeech, setChildSpeech] = useState(initial.childSpeech ?? [])
+  const [spouseActions, setSpouseActions] = useState(initial.spouseActions ?? [])
+  const [spouseEmotions, setSpouseEmotions] = useState(initial.spouseEmotions ?? [])
+  const [shareReasons, setShareReasons] = useState(initial.shareReasons ?? [])
+  const [shareChoice, setShareChoice] = useState(initial.shareChoice ?? null)
+  const [spousePresent, setSpousePresent] = useState(initial.spousePresent ?? null)
 
   // 다중/순서 토글 (append 순서 유지)
   const toggle = (setter) => (option) =>
@@ -61,12 +68,16 @@ export default function ConflictScreen({ userName, scene, onBack, onDone }) {
       prev.includes(option) ? prev.filter((x) => x !== option) : [...prev, option],
     )
 
-  // [C-93] childSpeech 다음은 항상 spousePresence(재석 질문)로 간다.
-  //  재석 답에 따라 spouseAction(있었음)/share(없었음)로 갈리는 분기는 그 스텝의 onNext에 있음.
+  // 선형 구간 전/후 이동(seed된 스텝은 시퀀스에서 이미 제거됨 → 중복 질문 없음).
+  //  다음이 없으면(=마지막 spousePresence) 분기 로직이 대신 처리. 이전이 없으면 화면 이탈(onBack).
+  const goNext = (cur) => () => setStep(retroNext(sequence, cur))
+  const goBack = (cur) => () => {
+    const prev = retroPrev(sequence, cur)
+    if (prev) setStep(prev)
+    else onBack()
+  }
 
-  // [5-B §0-(1)] 완료 시 각 스텝의 로컬 state 를 App(current)으로 넘길 취합 객체.
-  //  ★ App.buildConflictData 가 이 키들을 conflict_input.data(jsonb) 필드로 매핑한다.
-  //    키 이름을 바꾸면 App 쪽 매핑도 함께 바꿔야 함(저장구조 정합).
+  // [5-B §0-(1)] 완료 시 각 스텝의 로컬 state 를 App(current)으로 넘길 취합 객체(깊은 회고와 동일 계약).
   const collect = () => ({
     reason, // 회고①트리거 2층 {immediate, amplifiers}
     emotions, // 회고④ 감정칩(순서)
@@ -82,15 +93,37 @@ export default function ConflictScreen({ userName, scene, onBack, onDone }) {
   })
 
   switch (step) {
+    // ★ [C-25] 감정 조절 텀 — settling 최초 진입에서 사실(내 표현·아이 반응) 뒤 1회.
+    //   여기까지 할게요 = 응답 병합·incomplete·홈 재개(매칭·결과 이동 없음) / 조금 더 이어서 = 첫 미응답 질문.
+    //   문구 = §801 안심 + §798 버튼(texts.shallow). 새 문구 없음.
+    case 'pause':
+      return (
+        <PhoneFrame onBack={goBack('pause')}>
+          <div className="fade-in">
+            <p style={styles.resultParagraph}>{texts.shallow.reassure}</p>
+          </div>
+          <div style={styles.footer}>
+            <div style={styles.choiceList}>
+              <button style={styles.choiceButton} onClick={goNext('pause')}>
+                {texts.shallow.continue}
+              </button>
+              <button style={styles.primaryButton} onClick={() => onStop(collect())}>
+                {texts.shallow.stop}
+              </button>
+            </div>
+          </div>
+        </PhoneFrame>
+      )
+
     // B - 회고① 트리거 2층: 상단=즉시트리거(단일, 필수) / 하단=증폭배경(복수, 0개 허용)
     case 'reason':
       return (
         <QuestionStep
-          onBack={onBack}
+          onBack={goBack('reason')}
           title={c.reason.question(scene)}
           sub={c.reason.sub}
           canProceed={reason.immediate !== null} // 상단 1개 필수, 하단은 선택
-          onNext={() => setStep('feeling')} // C-110: coping 스텝 폐기로 reason↔feeling 직결
+          onNext={goNext('reason')}
         >
           {/* 상단 — 즉시 트리거 (단일선택 · 라디오 방식) */}
           <div style={styles.choiceList}>
@@ -141,11 +174,11 @@ export default function ConflictScreen({ userName, scene, onBack, onDone }) {
     case 'feeling':
       return (
         <QuestionStep
-          onBack={() => setStep('reason')} // C-110: coping 스텝 폐기로 reason↔feeling 직결
+          onBack={goBack('feeling')}
           title={c.feeling.question(userName)}
           sub={c.feeling.sub}
           canProceed={emotions.length > 0 && intensity !== null}
-          onNext={() => setStep('expression')}
+          onNext={goNext('feeling')}
         >
           <OrderedChipGroup
             options={c.feeling.emotions}
@@ -165,11 +198,11 @@ export default function ConflictScreen({ userName, scene, onBack, onDone }) {
     case 'expression':
       return (
         <QuestionStep
-          onBack={() => setStep('feeling')}
+          onBack={goBack('expression')}
           title={c.expression.question(childName)}
           sub={c.expression.sub}
           canProceed={expressions.length > 0}
-          onNext={() => setStep('childReaction')}
+          onNext={goNext('expression')}
         >
           <OrderedCardList
             options={[...c.expression.options, c.expression.otherOption]}
@@ -183,11 +216,11 @@ export default function ConflictScreen({ userName, scene, onBack, onDone }) {
     case 'childReaction':
       return (
         <QuestionStep
-          onBack={() => setStep('expression')}
+          onBack={goBack('childReaction')}
           title={c.childReaction.question(childName)}
           sub={c.childReaction.sub}
           canProceed={childReactions.length > 0}
-          onNext={() => setStep('childSpeech')}
+          onNext={goNext('childReaction')}
         >
           <OrderedCardList
             options={c.childReaction.options}
@@ -201,12 +234,12 @@ export default function ConflictScreen({ userName, scene, onBack, onDone }) {
     case 'childSpeech':
       return (
         <QuestionStep
-          onBack={() => setStep('childReaction')}
+          onBack={goBack('childSpeech')}
           title={c.childSpeech.question(childName)}
           sub={c.childSpeech.sub}
-          onNext={() => setStep('spousePresence')}
+          onNext={goNext('childSpeech')}
           secondaryLabel={c.skipButton}
-          onSecondary={() => setStep('spousePresence')}
+          onSecondary={goNext('childSpeech')}
         >
           <CardChoiceList
             options={c.childSpeech.options}
@@ -216,15 +249,12 @@ export default function ConflictScreen({ userName, scene, onBack, onDone }) {
         </QuestionStep>
       )
 
-    // ★ 배우자 재석 확인 (C-93) — childSpeech(G) 다음, spouseAction(H)/share 앞.
-    //   "그 자리에 있었나" 사실 확인이지 "개입했나"가 아님(H가 '지켜봤어요'·'자리를 피했어요'도 받으므로).
-    //   spouseIncluded(who 유래) 대체 — 재석 여부의 소스가 이 스텝으로 이관됨.
-    //   선택값 = 옵션 라벨(SPOUSE_PRESENCE_OPTIONS). 있었음([0]) → spouseAction, 없었음 → share.
+    // ★ 배우자 재석 확인 (C-93) — 선형 구간의 마지막. 재석 답으로 spouseAction(있었음)/share(없었음) 분기.
     //   ★ 저장 갈래(App.buildConflictData)도 같은 상수 [0]을 비교값으로 씀 — 문구 정본은 texts.
     case 'spousePresence':
       return (
         <QuestionStep
-          onBack={() => setStep('childSpeech')}
+          onBack={goBack('spousePresence')}
           title={c.spousePresence.question(spouseGivenName)}
           canProceed={spousePresent !== null}
           onNext={() =>
