@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import HomeScreen from './screens/HomeScreen'
 import CountScreen from './screens/CountScreen'
 import NoConflictScreen from './screens/NoConflictScreen'
@@ -26,8 +26,8 @@ import { styles } from './theme'
 import { texts } from './texts'
 import { findByRelation } from './data/familyMembers'
 import { matchTdToInput } from './utils/matchTd'
-import { saveConflictInput } from './lib/supabaseClient'
-import { getCurrentMemberId } from './lib/identity'
+import { saveConflict } from './lib/supabaseClient'
+import { getCurrentInviteToken } from './lib/identity'
 import { parseInviteToken, redeemInvite } from './utils/inviteToken'
 import { decideRoute, ROUTE } from './utils/authRouter'
 
@@ -126,6 +126,9 @@ export default function App() {
   // [C-25 정정] 회고 모드 — 'calm'(깊은 회고 바로) | 'settling'(사실 먼저 + 감정 조절 텀 후 깊은 회고 합류).
   const [retroMode, setRetroMode] = useState('calm')
   const [matchResult, setMatchResult] = useState(null) // matchTdToInput 결과 {num,title,...}
+  // [A-5] 저장 실패 통지 상태(결과 화면 배너). [A-10] 이미 저장 성공한 건 재저장 방지(ref).
+  const [saveError, setSaveError] = useState(false)
+  const savedCaseIds = useRef(new Set())
 
   // [C-16] 초대 토큰 진입 — 있을 때만 동작. 없으면 아래 전부 무효과(showcase/뷰어 경로 무변경).
   const inviteToken = useMemo(() => parseInviteToken(), [])
@@ -140,12 +143,16 @@ export default function App() {
     return () => { alive = false }
   }, [inviteToken])
   const authSession = auth.session || null
-  // 초대 세션이면 그 구성원 이름을, 아니면 기본값(showcase).
-  const userName = authSession?.memberName || DEFAULT_USER_NAME
 
   // 보는 사람. ?viewer=spouse 로 진입하면 정민님(배우자) 경로로 흐른다.
   //  (실서비스에선 로그인한 사용자 기준으로 자동 결정)
   const viewer = new URLSearchParams(window.location.search).get('viewer')
+
+  // [KI-17-3] 홈 인사 주체 정합. 초대 세션이면 그 구성원 이름을 최우선.
+  //  초대 세션이 없는 showcase에선 ?viewer=spouse면 배우자(정민), 그 외는 기본 사용자(현정).
+  const spouseName = findByRelation('배우자')?.givenName ?? '정민'
+  const userName =
+    authSession?.memberName || (viewer === 'spouse' ? spouseName : DEFAULT_USER_NAME)
 
   const go = (next) => () => setScreen(next)
 
@@ -258,20 +265,36 @@ export default function App() {
 
   // 깊은회고 완료 — ConflictScreen 각 스텝값(retro)을 current 로 취합(§0-(1)) 후,
   //  [SHOWCASE/LIVE 분기] live 모드일 때만 conflict_input.data(jsonb)에 저장. 매칭·리포트는 분기 밖(공통).
+  // [A-2·A-3·A-5·A-10] 저장 = save_conflict RPC. 앱은 토큰만 넘기고 서버가 member/family 확정.
+  //  depth = 회고 모드 매핑(settling→shallow · calm→deep). is_sensitive 미전송(DB default true).
+  //  실패해도 결과 화면은 계속 진행하되 무음 처리하지 않고 saveError로 통지·재시도(A-5).
+  //  c.id(회고 1건당 무작위 client id)를 멱등 키로 써 재시도 중복을 막는다(A-10).
+  const persistConflict = (c) => {
+    if (APP_MODE !== 'live') return // showcase = 저장 안 함(A-6·A-8)
+    if (savedCaseIds.current.has(c.id)) return // 이미 성공한 건 재저장 안 함(A-10)
+    const depth = retroMode === 'settling' ? 'shallow' : 'deep'
+    setSaveError(false)
+    saveConflict({
+      token: getCurrentInviteToken(),
+      scene: c.scene ?? null,
+      depth,
+      presentMembers: { whoSelectedIds: c.whoSelectedIds ?? [], spousePresent: c.spousePresent ?? null },
+      data: buildConflictData(c),
+      idempotencyKey: c.id,
+    })
+      .then((res) => {
+        if (res.ok) savedCaseIds.current.add(c.id)
+        else setSaveError(true)
+      })
+      .catch(() => setSaveError(true))
+  }
+
   const completeCurrent = (retro = {}) => {
     const c = { ...current, ...retro, status: 'complete' }
     upsertCase(c)
     setCurrent(c)
-    if (APP_MODE === 'live') {
-      // ★ member_id 신분 소스는 getCurrentMemberId() 하나로 격리(알파↔베타 교체 지점, §3-B).
-      saveConflictInput({
-        conflict_id: c.id,
-        member_id: getCurrentMemberId(),
-        is_sensitive: false, // 기본 false(추후 규칙)
-        data: buildConflictData(c),
-      })
-    }
-    // showcase 면 저장 안 함 — 아래 done/매칭/리포트는 두 모드 공통으로 그대로 진행.
+    persistConflict(c) // live 모드에서만 실제 저장(내부 가드). showcase 무변경.
+    // done/매칭/리포트는 두 모드 공통으로 그대로 진행.
     setScreen('done')
   }
 
@@ -479,15 +502,37 @@ export default function App() {
 
     case 'result':
       return (
-        <ResultScreen
-          userName={userName}
-          tdNumber={matchResult?.num}
-          spouseIncluded={current?.spouseIncluded}
-          cases={cases}
-          onBack={go('done')}
-          onHome={go('home')}
-          onReport={go('report')}
-        />
+        <>
+          {saveError && (
+            <div
+              style={{
+                position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50,
+                background: '#5b3a3a', color: '#fff', padding: '10px 14px',
+                textAlign: 'center', fontSize: '13px', lineHeight: 1.4,
+              }}
+            >
+              결과는 볼 수 있지만 기록 저장은 완료되지 않았어요. 잠시 후 다시 시도해 주세요.
+              <button
+                style={{
+                  marginLeft: '8px', textDecoration: 'underline', background: 'none',
+                  border: 'none', color: '#fff', cursor: 'pointer', font: 'inherit',
+                }}
+                onClick={() => current && persistConflict(current)}
+              >
+                다시 시도
+              </button>
+            </div>
+          )}
+          <ResultScreen
+            userName={userName}
+            tdNumber={matchResult?.num}
+            spouseIncluded={current?.spouseIncluded}
+            cases={cases}
+            onBack={go('done')}
+            onHome={go('home')}
+            onReport={go('report')}
+          />
+        </>
       )
 
     case 'report':
