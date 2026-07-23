@@ -61,11 +61,31 @@ async function run(){
   record('R-4','유효 토큰 저장 → log1+input1 FK정합','log=1,input=1',`log=${cnt4[0].l},input=${cnt4[0].i},logId=${!!s4.body?.conflict_log_id}`,s4.ok&&Number(cnt4[0].l)===1&&Number(cnt4[0].i)===1,{resp:s4.body})
 
   // R-5: 만료·위조 토큰 → 거부, 행 생성 0
-  const before5=Number((await mgmt(`select count(*) c from public.conflict_log cl join public.member m on m.id in (select id from public.member where family_id='${F.f1}') where cl.family_id='${F.f1}';`))[0].c)
+  //  ★ 정정(GPT PM MAJOR): 각 호출 직전/직후에 conflict_log·conflict_input 건수를 별도 측정한다.
+  //    (JOIN cartesian 과대집계 폐기 — delta=-3 같은 비정상값 방지). log delta=0·input delta=0 이라야 PASS.
+  async function fam1Counts(){
+    const r=await mgmt(`select
+        (select count(*) from public.conflict_log where family_id='${F.f1}') as logs,
+        (select count(*) from public.conflict_input ci join public.conflict_log cl on cl.id=ci.conflict_id where cl.family_id='${F.f1}') as inputs;`)
+    return { logs:Number(r[0].logs), inputs:Number(r[0].inputs) }
+  }
+  // 위조 토큰
+  const preBad=await fam1Counts()
   const bad5=await rpc('save_conflict',{p_token:'not_a_real_token_zzzzzzzzzzzz',p_scene:'x',p_depth:'deep',p_data:{}})
+  const postBad=await fam1Counts()
+  const badLogD=postBad.logs-preBad.logs, badInD=postBad.inputs-preBad.inputs
+  // 만료 토큰
+  const preExp=await fam1Counts()
   const exp5=await rpc('save_conflict',{p_token:F.tExp,p_scene:'x',p_depth:'deep',p_data:{}})
-  const after5=Number((await mgmt(`select count(*) c from public.conflict_log where family_id='${F.f1}';`))[0].c)
-  record('R-5','만료·위조 토큰 거부·행생성0','both denied, delta rows 0',`bad=${bad5.status},exp=${exp5.status},delta=${after5-before5}`,!bad5.ok&&!exp5.ok,{bad:bad5.body,exp:exp5.body})
+  const postExp=await fam1Counts()
+  const expLogD=postExp.logs-preExp.logs, expInD=postExp.inputs-preExp.inputs
+  const r5pass = !bad5.ok && !exp5.ok && badLogD===0 && badInD===0 && expLogD===0 && expInD===0
+  record('R-5','만료·위조 토큰 거부 · log/input delta 0 (별도 측정)',
+    'both denied · badLogΔ0 badInΔ0 expLogΔ0 expInΔ0',
+    `bad=${bad5.status}(logΔ${badLogD},inΔ${badInD}) exp=${exp5.status}(logΔ${expLogD},inΔ${expInD})`,
+    r5pass,
+    { forged:{ status:bad5.status, denied:!bad5.ok, resp:bad5.body, preCounts:preBad, postCounts:postBad, logDelta:badLogD, inputDelta:badInD },
+      expired:{ status:exp5.status, denied:!exp5.ok, resp:exp5.body, preCounts:preExp, postCounts:postExp, logDelta:expLogD, inputDelta:expInD } })
 
   // R-7: get_family_conflicts 타가족 0건 · data 원문 0
   const listF1=await rpc('get_family_conflicts',{p_token:F.tP1})
