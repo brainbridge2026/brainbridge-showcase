@@ -32,6 +32,96 @@ export const texts = {
     },
   },
 
+  // [Sprint 17 · C-16] 온보딩(주양육자 1회) + 초대 접속 상태.
+  //  ★ 사용자 대면 용어: "초대"만. "매직링크"·"로그인"·"토큰"·"접속"은 화면에 쓰지 않는다.
+  onboarding: {
+    // 초대 확인 중 / 실패(A-7: 내부 사유·오류 원문 비노출)
+    loading: '잠시만요, 초대를 확인하고 있어요…',
+    deniedTitle: '초대를 확인할 수 없어요',
+    deniedBody:
+      '이 초대는 만료되었거나 올바르지 않아요. 초대를 보내주신 분께 새 초대를 다시 요청해 주세요.',
+    deniedHome: '처음으로',
+
+    stepLabel: (n) => `${n} / 4`,
+    next: '다음',
+    done: '홈으로',
+
+    // 1화면 — 주양육자 본인 프로필
+    step1: {
+      title: (name) => `${name}님, 먼저 몇 가지만 여쭐게요`,
+      sub: '입력하신 내용은 번역·코칭 톤을 맞추는 데만 참고해요.',
+      sexQ: '성별 (선택)',
+      sexOptions: [
+        { label: '여성', value: 'female' },
+        { label: '남성', value: 'male' },
+      ],
+      diagnosisQ: '이미 받은 진단이 있으신가요? (선택)',
+      diagnosisNote: '진단은 필수가 아니에요. 없어도 서비스를 이용할 수 있어요.',
+      diagnosisOptions: [
+        { label: 'ADHD', value: 'adhd' },
+        { label: '자폐', value: 'autism' },
+        { label: '기타', value: 'other' },
+        { label: '없어요 / 잘 모르겠어요', value: 'none_or_unsure' },
+        { label: '밝히지 않을게요', value: 'prefer_not_to_say' },
+      ],
+    },
+
+    // 2화면 — 가족 구성원 추가
+    step2: {
+      title: '가족 구성원을 한 명씩 더해요',
+      sub: '나중에 언제든 더하거나 바꿀 수 있어요.',
+      empty: '아직 더한 구성원이 없어요.',
+      addButton: '＋ 구성원 추가',
+      inviteReady: '초대 준비됨',
+      nameLabel: '이름',
+      namePlaceholder: '예: 이안',
+      roleQ: '이 사람은 누구인가요?',
+      roleOptions: [
+        { label: '배우자', value: 'partner' },
+        { label: '자녀', value: 'child' },
+      ],
+      ageLabel: '나이 (자녀)',
+      agePlaceholder: '예: 8',
+      saveMember: '이 구성원 더하기',
+      cancel: '취소',
+      // §2-A 자녀 직접이용 여부 (자녀 + 나이 입력 후)
+      childUseTitle: (child) => `${child}의 이야기는 누가 들려줄까요?`,
+      childUseBody: (child) =>
+        `가족이 부딪힌 순간에 대해 ${child}가 느낀 것을 전해주셔야 해요.\n${child}가 직접 쓸 수도, 대신 전해주실 수도 있어요.`,
+      childDirect: {
+        title: (child) => `${child}가 직접 쓸 거예요`,
+        body: (child) =>
+          `${child}가 직접 쓸 수 있도록 ${child}도 초대할게요. ${child}가 쓴 이야기와 결과는 ${child}만 볼 수 있어요.`,
+      },
+      childProxy: {
+        title: '제가 대신 전해줄게요',
+        body: (child) =>
+          `${child}의 이야기도 함께 적어주세요. ${child}를 위한 결과도 보시고, 함께 읽어주시면 돼요.`,
+      },
+      // tier1(5~7세): "직접" 비활성 (19-i-7)
+      childDirectDisabledNote: '이 나이에는 함께 읽는 것이 더 편해요.',
+      childUseChangeNote: '나중에 언제든 바꿀 수 있어요.',
+    },
+
+    // 3화면 — 자주 반복되는 순간 (탭만, 복수)
+    step3: {
+      title: '우리집에서 자주 반복되는 순간은?',
+      sub: '떠오르는 대로 골라주세요. 여러 개 괜찮아요. (건너뛰어도 돼요)',
+      options: [
+        '숙제·공부', '아침 등교 준비', '스마트폰·게임', '형제·자매 다툼',
+        '밥·먹기', '잘 시간', '정리·집안일', '외출·약속',
+      ],
+    },
+
+    // 4화면 — 완료 (A-6 확인 화면: 구성원별 초대 준비 상태)
+    step4: {
+      title: '준비됐어요',
+      body: '가족 구성원에게는 각자의 초대를 곧 보내드릴게요.',
+      membersLabel: '함께할 가족',
+      empty: '아직 더한 구성원이 없어요. 홈에서 언제든 추가할 수 있어요.',
+    },
+  },
+
   // 정민님용 개인결과 — 현정님 입력을 바탕으로 배우자(정민님) 관점을 정리한 화면.
   // 내용은 td_json sections.B(그때, 아빠는)를 재사용. name=현정님, spouse=정민님.
   spouseResult: {

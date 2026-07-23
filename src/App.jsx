@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import HomeScreen from './screens/HomeScreen'
 import CountScreen from './screens/CountScreen'
 import NoConflictScreen from './screens/NoConflictScreen'
@@ -20,16 +20,43 @@ import SpouseResultScreen from './screens/SpouseResultScreen'
 import AnotherAskScreen from './screens/AnotherAskScreen'
 import BurnoutScreen from './screens/BurnoutScreen'
 import AcceptScreen from './screens/AcceptScreen'
+import OnboardingScreen from './screens/OnboardingScreen'
+import PhoneFrame from './components/PhoneFrame'
+import { styles } from './theme'
 import { texts } from './texts'
 import { findByRelation } from './data/familyMembers'
 import { matchTdToInput } from './utils/matchTd'
 import { saveConflictInput } from './lib/supabaseClient'
 import { getCurrentMemberId } from './lib/identity'
+import { parseInviteToken, redeemInvite } from './utils/inviteToken'
+import { decideRoute, ROUTE } from './utils/authRouter'
 
 // 나중에 실제 사용자 이름으로 쉽게 바꿀 수 있도록 이름을 변수로 관리합니다.
-// TODO: 로그인/사용자 정보 연동 시 이 값을 실제 사용자 이름으로 교체하세요.
-const userName = '현정'
+// [C-16] 초대(세션)로 들어오면 그 구성원 이름으로 대체된다. 초대 없으면 이 기본값(showcase 무변경).
+const DEFAULT_USER_NAME = '현정'
 const MAX_CASES = 3
+
+// [C-16] 초대 확인 중 / 확인 실패(A-7: 내부 사유·오류 원문 비노출) — "초대" 용어만.
+function InviteLoading() {
+  return (
+    <PhoneFrame>
+      <p style={{ ...styles.subText, textAlign: 'center' }}>{texts.onboarding.loading}</p>
+    </PhoneFrame>
+  )
+}
+function InviteDenied({ onHome }) {
+  return (
+    <PhoneFrame>
+      <div>
+        <h1 style={styles.question}>{texts.onboarding.deniedTitle}</h1>
+        <p style={{ ...styles.subText, marginTop: '12px' }}>{texts.onboarding.deniedBody}</p>
+        <div style={styles.footer}>
+          <button style={styles.primaryButton} onClick={onHome}>{texts.onboarding.deniedHome}</button>
+        </div>
+      </div>
+    </PhoneFrame>
+  )
+}
 
 // [SHOWCASE/LIVE 분기 · 5-B §3-A] 저장만 갈린다. 매칭·리포트는 두 모드 공통(항상 실작동).
 //   미설정/그 외 = showcase(저장 안 함). 'live' 일 때만 conflict_input 에 저장.
@@ -99,6 +126,22 @@ export default function App() {
   // [C-25 정정] 회고 모드 — 'calm'(깊은 회고 바로) | 'settling'(사실 먼저 + 감정 조절 텀 후 깊은 회고 합류).
   const [retroMode, setRetroMode] = useState('calm')
   const [matchResult, setMatchResult] = useState(null) // matchTdToInput 결과 {num,title,...}
+
+  // [C-16] 초대 토큰 진입 — 있을 때만 동작. 없으면 아래 전부 무효과(showcase/뷰어 경로 무변경).
+  const inviteToken = useMemo(() => parseInviteToken(), [])
+  const [auth, setAuth] = useState(inviteToken ? { status: 'loading' } : { status: 'none' })
+  useEffect(() => {
+    if (!inviteToken) return
+    let alive = true
+    redeemInvite(inviteToken).then((r) => {
+      if (!alive) return
+      setAuth({ status: 'ready', ...decideRoute(r) })
+    })
+    return () => { alive = false }
+  }, [inviteToken])
+  const authSession = auth.session || null
+  // 초대 세션이면 그 구성원 이름을, 아니면 기본값(showcase).
+  const userName = authSession?.memberName || DEFAULT_USER_NAME
 
   // 보는 사람. ?viewer=spouse 로 진입하면 정민님(배우자) 경로로 흐른다.
   //  (실서비스에선 로그인한 사용자 기준으로 자동 결정)
@@ -277,6 +320,25 @@ export default function App() {
     id: c.id,
     sub: texts.home.resume.sub(childName, c.scene),
   }))
+
+  // [C-16] 초대 진입 분기 — inviteToken 있을 때만. 없으면 기존 switch(showcase/뷰어) 그대로.
+  if (inviteToken) {
+    if (auth.status === 'loading') return <InviteLoading />
+    if (auth.route === ROUTE.DENIED) return <InviteDenied onHome={() => { window.location.search = '' }} />
+    if (auth.route === ROUTE.ONBOARDING) {
+      return (
+        <OnboardingScreen
+          token={inviteToken}
+          session={authSession}
+          initialStep={auth.resumeStep || 1}
+          onComplete={() =>
+            setAuth({ status: 'ready', route: ROUTE.HOME, session: authSession, resumeStep: null })
+          }
+        />
+      )
+    }
+    // route === HOME → 아래 기존 화면으로 진행(userName이 세션 구성원 이름을 반영, A-3).
+  }
 
   switch (screen) {
     case 'home':

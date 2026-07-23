@@ -8,6 +8,7 @@ import { cleanText, isSupportedFormat } from '../utils/text'
 import { matchTdToInput } from '../utils/matchTd'
 import tdCategoryMap from '../data/tdCategoryMap.json'
 import repeatAck from '../data/repeatAcknowledgment.json'
+import { pickReassure, pickRepeatAck } from '../utils/comfort'
 import UnsupportedNotice from '../components/UnsupportedNotice'
 
 // 기본은 1번. ?td=50 처럼 URL로 다른 사건 번호를 테스트할 수 있다.
@@ -75,19 +76,17 @@ export default function ResultScreen({
   //  둘 다 로드 시 1회 랜덤 → 새로고침/재진입마다 다시 랜덤(세션 유지 없음).
   useEffect(() => {
     let alive = true
-    const pick = (arr) => arr[Math.floor(Math.random() * arr.length)]
 
     // 반복 인정 — 같은 td 완료 건수(이번 건 포함) 기준 구간 판정
     const sameTdCount = (cases ?? [])
       .filter((c) => c?.status === 'complete')
       .filter((c) => matchTdToInput(c).num === tdNum).length
-    let ackPool = null
-    if (sameTdCount === 2) ackPool = repeatAck.tier2
-    else if (sameTdCount === 3 || sameTdCount === 4) ackPool = repeatAck.tier3_4
-    else if (sameTdCount >= 5) ackPool = repeatAck.tier5plus
-    setRepeatAckText(ackPool && ackPool.length ? fill(pick(ackPool)) : null)
+    // [D-1] (tdNum+tier) 활성 세션 안정 — C-116(MissionScreen)과 동일 방식으로 통일.
+    //  같은 td·같은 tier로 화면 재진입(mount) 시 동일 문구 유지, 반복 구간(tier)이 바뀔 때만 변경.
+    const ack = pickRepeatAck(repeatAck, sameTdCount, tdNum)
+    setRepeatAckText(ack ? fill(ack) : null)
 
-    // 위로풀 — 카테고리 매핑 있는 td만. public/reassurePools.json에서 카테고리별 5개 중 1개.
+    // 위로풀 — 카테고리 매핑 있는 td만. C-116과 동일 pickReassure(직전 문구 즉시 중복 회피).
     const cat = tdCategoryMap[`td${tdNum}`]
     if (!cat) {
       setReassureText(null)
@@ -96,8 +95,8 @@ export default function ResultScreen({
         .then((res) => res.json())
         .then((pools) => {
           if (!alive) return
-          const arr = pools?.[cat]
-          setReassureText(arr && arr.length ? fill(pick(arr)) : null)
+          const picked = pickReassure(pools?.[cat])
+          setReassureText(picked ? fill(picked) : null)
         })
         .catch(() => {})
     }

@@ -368,7 +368,6 @@ export default function ConflictScreen({
 
     // 공유 이후 코칭 placeholder → 완료
     case 'coaching':
-    default:
       return (
         <QuestionStep
           onBack={() => setStep(coachingBack)}
@@ -377,5 +376,11 @@ export default function ConflictScreen({
           onNext={() => onDone(collect())}
         />
       )
+
+    // [D-2] 안전 가드 — 정의 밖 step 값으로 진입하는 실제 경로는 없다.
+    //  다만 기존엔 default가 'coaching'과 결합돼 있어, 이론상 정의 밖 step이 완료(coaching·onDone)
+    //  화면을 노출할 수 있었다. 두 case를 분리하고 default는 아무것도 렌더하지 않아 그 경로를 제거한다.
+    default:
+      return null
   }
 }

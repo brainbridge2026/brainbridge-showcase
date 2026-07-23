@@ -34,6 +34,12 @@ export function seededSteps(initial = {}) {
     feeling: (initial?.emotions?.length ?? 0) > 0 && (initial?.intensity ?? null) !== null,
     expression: (initial?.expressions?.length ?? 0) > 0,
     childReaction: (initial?.childReactions?.length ?? 0) > 0,
+    // [D-3] 데이터 계약 완전화 — childSpeech·spousePresent 필드 편입(값이 비어도 필드는 존재).
+    //  감정 조절 텀(pause)은 childReaction 직후라, seededSteps가 소비되는 시점(settling 진입/재개)엔
+    //  이 두 값이 '항상 빈 값'이다 → 두 값은 false로 계산되어 buildRetroSequence 회귀 없음
+    //  (childSpeech 스텝·spousePresence 스텝 모두 그대로 유지). 계약상 필드만 완전하게 채운다.
+    childSpeech: (initial?.childSpeech?.length ?? 0) > 0,
+    spousePresent: (initial?.spousePresent ?? null) !== null,
   }
 }
 
@@ -45,7 +51,9 @@ export function buildRetroSequence(mode, initial = {}) {
   const seeded = seededSteps(initial)
   const resumed = seeded.expression || seeded.childReaction
   const base = mode === 'settling' && !resumed ? SETTLING_ORDER : CALM_ORDER
-  // seed된 스텝만 제거. pause·childSpeech·spousePresence는 seeded 키에 없어 항상 유지.
+  // seed된 사실 스텝(reason/feeling/expression/childReaction)만 제거.
+  //  pause·spousePresence 스텝은 seeded 키와 이름이 달라 항상 유지되고,
+  //  childSpeech는 seeded 키에 있으나 소비 시점 값이 항상 false라 역시 항상 유지된다(D-3).
   return base.filter((s) => !seeded[s])
 }
 
