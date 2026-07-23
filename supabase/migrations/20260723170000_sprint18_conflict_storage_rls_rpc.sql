@@ -243,3 +243,10 @@ revoke execute on function public.get_conflict_detail(text,uuid)                
 grant execute on function public.save_conflict(text,text,text,jsonb,jsonb,text) to anon;
 grant execute on function public.get_family_conflicts(text)                     to anon;
 grant execute on function public.get_conflict_detail(text,uuid)                 to anon;
+
+-- ★ 운영/서버 경로(service_role)에도 명시 grant (BuildPack §2-B 규격 = anon + service_role).
+--   Supabase 기본권한이 service_role 에 직접 부여하지만, 마이그레이션을 자기완결·재적용 가능하게
+--   명시한다(qa MAJOR 해소). service_role 은 클라이언트에 절대 투입하지 않는다(A-10·R-14).
+grant execute on function public.save_conflict(text,text,text,jsonb,jsonb,text) to service_role;
+grant execute on function public.get_family_conflicts(text)                     to service_role;
+grant execute on function public.get_conflict_detail(text,uuid)                 to service_role;
