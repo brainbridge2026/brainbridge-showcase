@@ -308,16 +308,12 @@ export const texts = {
     },
 
     // E - 이안이에게 한 말 (순서대로, "그 외" 포함)
+    // [정본] C-50 확정본 v1 반영(Sprint 19). 장면별 25개는 src/data/expressionPool.json이 정본이며
+    //   ConflictScreen이 scene별로 조회한다. 임시공통 options 배열 제거 · 질문/보조/그외만 유지.
+    //   출처: docs/03_콘텐츠자산/BrainBridge_회고2_내표현_avoid풀_확정본_v1.md §3.
     expression: {
       question: (child) => `그때 ${familiar(child)}에게 어떤 말들을 하셨어요?`,
       sub: '하나만 해당돼도 괜찮고, 여러 말을 하셨다면 순서대로 골라주세요. 그때의 말을 그대로 담는 거예요, 스스로를 탓하지 않으셔도 돼요.',
-      options: [
-        '몇 번을 말해야 해?',
-        '너는 왜 맨날 그래?',
-        '빨리 좀 해.',
-        '엄마가 다 해야 돼?',
-        '이제 알아서 해.',
-      ],
       otherOption: '그 외',
     },
 

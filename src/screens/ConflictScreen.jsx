@@ -8,6 +8,8 @@ import { styles } from '../theme'
 import { texts } from '../texts'
 import { findByRelation } from '../data/familyMembers'
 import { buildRetroSequence, retroNext, retroPrev } from '../utils/retroFlow'
+// [C-50 / Sprint 19] 회고② 내표현 avoid풀 정본(장면별 25개). scene별 조회로 임시공통 5개를 대체.
+import expressionPool from '../data/expressionPool.json'
 
 // [C-93] 배우자 재석 선택지 — 순서 = [있었음, 없었음]. 라벨 문자열이 곧 저장값(다른 스텝과 동일 패턴).
 //  ★ 단일 정본 = texts.conflict.spousePresence.options(확정본 문구). 흐름 분기(아래 spousePresence 스텝)와
@@ -205,7 +207,13 @@ export default function ConflictScreen({
           onNext={goNext('expression')}
         >
           <OrderedCardList
-            options={[...c.expression.options, c.expression.otherOption]}
+            options={[
+              // [C-50 / Sprint 19] 임시공통 → 장면별 정본. scene별 5개 + "그 외".
+              //  ★ 무추론 원칙(§A-5): scene이 pool에 없거나 값이 없으면 빈 배열만 반환하고
+              //     다른 장면 문구를 대신 노출하지 않는다(임의 폴백 금지). §A-2 실측상 발생 불가.
+              ...(Array.isArray(expressionPool[scene]) ? expressionPool[scene] : []),
+              c.expression.otherOption,
+            ]}
             order={expressions}
             onToggle={toggle(setExpressions)}
           />

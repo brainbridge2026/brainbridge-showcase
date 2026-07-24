@@ -7,6 +7,9 @@ import {
   CALM_ORDER,
   SETTLING_ORDER,
 } from '../src/utils/retroFlow.js'
+// [Sprint 19] R-D용: 장면별 표현풀 정본(scene→5개) 조회 검증. bare JSON import 회피 위해 readFileSync 사용.
+import { readFileSync } from 'fs'
+const expressionPool = JSON.parse(readFileSync(new URL('../src/data/expressionPool.json', import.meta.url)))
 
 let pass = 0
 let fail = 0
@@ -55,6 +58,21 @@ check('first step prev=null (화면 이탈)', retroPrev(settling, settling[0]) =
 const settlingUnion = new Set([...settling.filter((s) => s !== 'pause'), ...resumed])
 const calmRequired = new Set(CALM_ORDER)
 check('데이터 계약 일치: settling 경유 스텝 union == calm 필수 스텝', eq([...settlingUnion].sort(), [...calmRequired].sort()))
+
+// ── [Sprint 19] R-A~R-D: 회고② 내표현 장면별 정본 반영 후에도 흐름·조회 계약 유지 ──
+// R-A: calm 시퀀스에 expression 포함 유지
+check('R-A calm 시퀀스에 expression 포함 유지', calm.includes('expression'))
+// R-B: settling 첫 스텝 = expression 유지
+check('R-B settling 첫 스텝 = expression 유지', settling[0] === 'expression')
+// R-C: seed 재개 시 expression 스킵 유지
+check('R-C seed 재개 시 expression 스킵 유지', !resumed.includes('expression'))
+// R-D: 5장면 각각에서 pool 조회가 정확히 5개를 반환
+const poolScenes = Object.keys(expressionPool).filter((k) => !k.startsWith('_'))
+check(
+  'R-D 5장면 각각 pool 조회 = 5개 (총 25)',
+  poolScenes.length === 5 && poolScenes.every((s) => Array.isArray(expressionPool[s]) && expressionPool[s].length === 5),
+  `scenes=${poolScenes.length} lens=${JSON.stringify(poolScenes.map((s) => expressionPool[s].length))}`,
+)
 
 console.log(`\n== retroFlow: ${pass} passed, ${fail} failed ==`)
 if (fail > 0) process.exit(1)
